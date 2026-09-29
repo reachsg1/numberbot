@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>보고 대기 관리</title>
+<meta name="theme-color" content="#1E5C48">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/css/app.css">
+<script src="/js/config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" defer></script>
+</head>
+<body class="admin">
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><small id="h-date">관리</small><b id="h-office">국장실 보고 대기 · 관리</b></div>
+    <div class="row"><span class="pill ok" id="h-state"><i></i>불러오는 중</span><button class="btn ghost sm" id="logout" hidden>로그아웃</button></div>
+  </header>
+
+  <section id="login" class="card" hidden>
+    <h2>관리자 로그인</h2>
+    <p class="sub">비서실 등 관리자로 등록된 구글 계정으로 로그인해 주세요.</p>
+    <p class="err-msg" id="login-err" role="alert"></p>
+    <button class="btn" id="login-btn">구글 계정으로 로그인</button>
+  </section>
+
+  <div id="main" hidden>
+    <div id="banner"></div>
+    <div class="acols">
+      <div class="acol">
+        <div class="card" id="presence"></div>
+        <div class="stats four" id="summary"></div>
+        <div id="now"></div>
+        <div class="card" id="queue"></div>
+        <div class="card" id="held"></div>
+        <div class="card" id="closed"></div>
+      </div>
+      <div class="acol">
+        <div class="card" id="sched"></div>
+        <div class="card">
+          <h2>대리 접수</h2>
+          <p class="sub">휴대폰 앱을 쓰기 어려운 분을 대신 접수합니다. 알림을 받을 수 없으므로 보고 시작·완료는 이 화면에서 눌러 주세요.</p>
+          <form id="proxy-form" novalidate>
+            <div class="grid2">
+              <div class="field"><label for="p-name">이름</label><input type="text" id="p-name" maxlength="20"></div>
+              <div class="field"><label for="p-dept">부서</label><input type="text" id="p-dept" maxlength="30"></div>
+            </div>
+            <div class="field"><label for="p-topic">보고 건명 (선택)</label><input type="text" id="p-topic" maxlength="60"></div>
+            <div class="field"><label for="p-appt">시간 지정 (선택)</label><select id="p-appt"><option value="">지금 줄 서기</option></select></div>
+            <p class="err-msg" id="p-err" role="alert"></p>
+            <button class="btn ghost" type="submit">대리 접수</button>
+          </form>
+        </div>
+        <div class="card" id="entry"></div>
+        <div class="card">
+          <h2>운영 설정</h2>
+          <form id="set-form" novalidate>
+            <div class="grid2">
+              <div class="field"><label for="s-officeName">보고 대상 이름</label><input type="text" id="s-officeName" maxlength="20"></div>
+              <div class="field"><label for="s-calendarId">국장님 캘린더 ID</label><input type="text" id="s-calendarId" maxlength="200"></div>
+              <div class="field"><label for="s-workStart">보고 시작 시각</label><input type="text" id="s-workStart" maxlength="5" placeholder="09:00"></div>
+              <div class="field"><label for="s-workEnd">보고 종료 시각</label><input type="text" id="s-workEnd" maxlength="5" placeholder="18:00"></div>
+              <div class="field"><label for="s-startLimitMin">호출 후 자동 취소(분)</label><input type="number" id="s-startLimitMin" min="2" max="30"></div>
+              <div class="field"><label for="s-remindMin">호출 후 재알림(분)</label><input type="number" id="s-remindMin" min="1" max="29"></div>
+              <div class="field"><label for="s-soonAhead">'곧 차례' 앞 대기(명 이하)</label><input type="number" id="s-soonAhead" min="1" max="10"></div>
+              <div class="field"><label for="s-soonMin">'곧 차례' 예상 대기(분 이내)</label><input type="number" id="s-soonMin" min="5" max="120"></div>
+              <div class="field"><label for="s-resumeBufferMin">일정 끝나고 호출까지 여유(분)</label><input type="number" id="s-resumeBufferMin" min="0" max="30"></div>
+              <div class="field"><label for="s-defaultMin">기록 없을 때 1인 보고 시간(분)</label><input type="number" id="s-defaultMin" min="3" max="60"></div>
+              <div class="field"><label for="s-appointLeadMin">시간 지정: 지금부터 최소(분)</label><input type="number" id="s-appointLeadMin" min="0" max="240"></div>
+              <div class="field"><label for="s-accessCode">접수 코드</label><input type="text" id="s-accessCode" maxlength="12"></div>
+            </div>
+            <label class="check"><input type="checkbox" id="s-appointEnabled"><span><b>시간 지정 허용</b> — 바쁜 기간에는 끄세요. 이미 받은 지정 번호표는 유지됩니다.</span></label>
+            <label class="check"><input type="checkbox" id="s-lunch"><span>점심시간(12:00~13:00)에는 호출하지 않음</span></label>
+            <label class="check"><input type="checkbox" id="s-requirePush"><span>알림 테스트를 통과해야 번호표 발급</span></label>
+            <p class="err-msg" id="s-err" role="alert"></p>
+            <button class="btn" type="submit">설정 저장</button>
+          </form>
+        </div>
+        <div class="card" id="admins"></div>
+        <div class="card" id="logs"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="module" src="/js/admin.js"></script>
+</body>
+</html>

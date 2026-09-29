@@ -1,0 +1,21 @@
+rules_version = '2';
+// 앱은 데이터베이스를 읽기만 하고, 모든 변경은 서버(Cloud Functions)를 거칩니다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && request.auth.token.email != null && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()));
+    }
+    function isMember() { return signedIn() && (request.auth.token.member == true || isAdmin()); }
+
+    match /tickets/{id}      { allow read: if isMember(); allow write: if false; }
+    match /days/{day}        { allow read: if isMember(); allow write: if false; }
+    match /settings/{doc}    { allow read: if isMember(); allow write: if false; }
+    match /private/{id}      { allow read: if isAdmin();  allow write: if false; }
+    match /dayPrivate/{day}  { allow read: if isAdmin();  allow write: if false; }
+    match /logs/{id}         { allow read: if isAdmin();  allow write: if false; }
+    match /admins/{email}    { allow read: if isAdmin();  allow write: if false; }
+    match /{document=**}     { allow read, write: if false; }
+  }
+}
