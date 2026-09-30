@@ -6,7 +6,7 @@ import * as L from '../public/js/logic.js';
 const DAY = '2026-09-23';
 const T = hhmm => L.at(DAY, hhmm);
 const M = L.MIN;
-const S = { requirePush: false };
+const S = { requirePush: false, workStart: '09:00', workEnd: '18:00' };
 const dayDoc = { busy: [{ s: T('10:30'), e: T('11:30') }] };
 let seq = 0;
 function tk(o) { seq++; return { id: 't' + seq, day: DAY, no: seq, status: 'waiting', order: seq, createdAt: seq, flags: {}, uid: 'u' + seq, ...o }; }
@@ -113,7 +113,7 @@ test('엔진: 보고 종료 시각에 남은 대기 마감', () => {
 test('동작: 번호표 발급 검증', () => {
   const now = T('10:00');
   assert.throws(() => L.actIssue({ name: '', dept: 'x' }, { uid: 'a' }, [], S, {}, now), /이름/);
-  assert.throws(() => L.actIssue({ name: '홍길동', dept: '기획' }, { uid: 'a' }, [], { requirePush: true }, {}, now), /알림/);
+  assert.throws(() => L.actIssue({ name: '홍길동', dept: '기획' }, { uid: 'a' }, [], { ...S, requirePush: true }, {}, now), /알림/);
   const ok = L.actIssue({ name: '홍길동', dept: '기획', refMin: 15 }, { uid: 'a' }, [], S, {}, now);
   assert.equal(ok.ticket.maskedName, '홍*동');
   assert.equal(ok.ticket.status, 'waiting');
@@ -167,3 +167,15 @@ test('시간 지정 가능 시각: 30분 이후, 일정·점심 제외, 지정 �
   assert.equal(slots.find(x => L.hm(x.at) === '11:40').count, 1);
 });
 
+
+test('보고 가능 시간 기본값 07:00~24:00, 자정(24:00) 처리', () => {
+  const D = {};
+  assert.equal(L.availability({}, D, T('06:59')).why, 'before');
+  assert.equal(L.availability({}, D, T('07:00')).ok, true);
+  assert.equal(L.availability({}, D, T('18:30')).ok, true, '18시 이후에도 보고 가능');
+  assert.equal(L.availability({}, D, T('23:45')).ok, true);
+  assert.equal(L.availability({}, D, L.at(DAY, '24:00')).why, 'before', '자정이 되면 다음 날로 넘어감');
+  assert.equal(L.at(DAY, '24:00'), L.at('2026-09-24', '00:00'));
+  assert.ok(L.validHM('24:00') && !L.validHM('24:30'));
+  assert.deepEqual(L.cleanSettings({ workStart: '07:00', workEnd: '24:00' }), { workStart: '07:00', workEnd: '24:00' });
+});

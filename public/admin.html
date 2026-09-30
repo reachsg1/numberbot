@@ -24,9 +24,12 @@
 
   <section id="login" class="card" hidden>
     <h2>관리자 로그인</h2>
-    <p class="sub">비서실 등 관리자로 등록된 구글 계정으로 로그인해 주세요.</p>
+    <p class="sub">Vercel 환경 변수 <b>ADMIN_PASSWORD</b>에 정해 둔 관리자 비밀번호를 입력해 주세요. 이 기기에서 30일 동안 유지됩니다.</p>
+    <form id="login-form" class="row" novalidate>
+      <input type="password" id="login-pw" autocomplete="current-password" placeholder="관리자 비밀번호" style="flex:1;min-width:180px">
+      <button class="btn" id="login-btn" type="submit">로그인</button>
+    </form>
     <p class="err-msg" id="login-err" role="alert"></p>
-    <button class="btn" id="login-btn">구글 계정으로 로그인</button>
   </section>
 
   <div id="main" hidden>
@@ -62,9 +65,9 @@
           <form id="set-form" novalidate>
             <div class="grid2">
               <div class="field"><label for="s-officeName">보고 대상 이름</label><input type="text" id="s-officeName" maxlength="20"></div>
-              <div class="field"><label for="s-calendarId">국장님 캘린더 ID</label><input type="text" id="s-calendarId" maxlength="200"></div>
-              <div class="field"><label for="s-workStart">보고 시작 시각</label><input type="text" id="s-workStart" maxlength="5" placeholder="09:00"></div>
-              <div class="field"><label for="s-workEnd">보고 종료 시각</label><input type="text" id="s-workEnd" maxlength="5" placeholder="18:00"></div>
+              <div class="field"><label for="s-calendarId">국장님 캘린더 ID (공개 캘린더)</label><input type="text" id="s-calendarId" maxlength="200"></div>
+              <div class="field"><label for="s-workStart">보고 시작 시각</label><input type="text" id="s-workStart" maxlength="5" placeholder="07:00"></div>
+              <div class="field"><label for="s-workEnd">보고 종료 시각</label><input type="text" id="s-workEnd" maxlength="5" placeholder="24:00"></div>
               <div class="field"><label for="s-startLimitMin">호출 후 자동 취소(분)</label><input type="number" id="s-startLimitMin" min="2" max="30"></div>
               <div class="field"><label for="s-remindMin">호출 후 재알림(분)</label><input type="number" id="s-remindMin" min="1" max="29"></div>
               <div class="field"><label for="s-soonAhead">'곧 차례' 앞 대기(명 이하)</label><input type="number" id="s-soonAhead" min="1" max="10"></div>
@@ -74,6 +77,8 @@
               <div class="field"><label for="s-appointLeadMin">시간 지정: 지금부터 최소(분)</label><input type="number" id="s-appointLeadMin" min="0" max="240"></div>
               <div class="field"><label for="s-accessCode">접수 코드</label><input type="text" id="s-accessCode" maxlength="12"></div>
             </div>
+            <div class="field"><label for="s-icalUrl">비공개 캘린더일 때: 비밀 주소(iCal 형식) — 공개 캘린더면 비워 두세요</label><input type="url" id="s-icalUrl" maxlength="500" placeholder="https://calendar.google.com/calendar/ical/.../private-.../basic.ics" autocomplete="off"></div>
+            <p class="hint">구글 캘린더 → 설정 → 해당 캘린더 → '캘린더 통합' → <b>iCal 형식의 비밀 주소</b>를 복사해 넣습니다. 이 주소는 관리 화면에만 보이고 신청자에게는 전달되지 않습니다.</p>
             <label class="check"><input type="checkbox" id="s-appointEnabled"><span><b>시간 지정 허용</b> — 바쁜 기간에는 끄세요. 이미 받은 지정 번호표는 유지됩니다.</span></label>
             <label class="check"><input type="checkbox" id="s-lunch"><span>점심시간(12:00~13:00)에는 호출하지 않음</span></label>
             <label class="check"><input type="checkbox" id="s-requirePush"><span>알림 테스트를 통과해야 번호표 발급</span></label>
@@ -81,7 +86,6 @@
             <button class="btn" type="submit">설정 저장</button>
           </form>
         </div>
-        <div class="card" id="admins"></div>
         <div class="card" id="logs"></div>
       </div>
     </div>

@@ -1,9 +1,10 @@
 {
-  "name": "bogo-queue",
+  "name": "numberbot",
   "private": true,
-  "description": "보고 대기 번호표 (GitHub + Vercel + Firebase 무료 요금제)",
   "type": "module",
-  "engines": { "node": "20.x" },
-  "scripts": { "test": "node --test tests/logic.test.mjs tests/server.test.mjs" },
-  "dependencies": { "firebase-admin": "^12.6.0" }
+  "description": "보고 대기 번호표 (Vercel + Upstash Redis, 추가 설치 없음)",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test tests/logic.test.mjs tests/ical.test.mjs tests/webpush.test.mjs tests/server.test.mjs"
+  }
 }

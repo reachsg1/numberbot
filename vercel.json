@@ -4,9 +4,9 @@
   "outputDirectory": "public",
   "regions": ["icn1"],
   "functions": {
-    "api/*.js": { "maxDuration": 30, "includeFiles": "public/js/logic.js" }
+    "api/*.js": { "maxDuration": 20, "includeFiles": "public/js/logic.js" }
   },
-  "crons": [{ "path": "/api/tick", "schedule": "30 14 * * *" }],
+  "crons": [{ "path": "/api/tick", "schedule": "30 16 * * *" }],
   "headers": [
     { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }, { "key": "Service-Worker-Allowed", "value": "/" }] },
     { "source": "/(.*)\\.(js|css|html|webmanifest)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }

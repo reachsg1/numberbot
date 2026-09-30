@@ -3,30 +3,35 @@ import * as L from './logic.js';
 import { $, esc, loadApi, toast, showError, availText, timelineHTML, demoBar, statusLabel, mmss, minsAgo } from './ui.js';
 
 const api = await loadApi();
-const S = { pub: null, adm: { priv: {}, dayPrivate: {}, logs: [] }, admins: [], code: '', settingsFilled: false, noteDraft: null };
+const S = { pub: null, adm: { priv: {}, dayPrivate: {}, logs: [] }, code: '', settingsFilled: false, noteDraft: null };
 demoBar(api, () => render());
 
 const op = (name, data = {}) => api.op(name, api.mode === 'demo' ? { ...data, __admin: true } : data);
 
 async function boot() {
-  const user = await api.ready();
-  if (!user || (api.mode === 'firebase' && user.isAnonymous)) return showLogin();
+  await api.ready();
+  if (api.mode === 'server' && !api.hasAdmin()) return showLogin();
   const me = await op('me').catch(e => ({ isAdmin: false, error: e }));
-  if (!me.isAdmin) return showLogin(`${user.email || '이 계정'}은 관리자로 등록되어 있지 않습니다. 등록된 관리자에게 추가를 요청해 주세요.`);
+  if (!me.isAdmin) { await api.signOut().catch(() => {}); return showLogin(me.error?.code === 'network' ? me.error.message : '로그인이 만료되었습니다. 다시 로그인해 주세요.'); }
   $('#login').hidden = true; $('#main').hidden = false; $('#logout').hidden = api.mode === 'demo';
   api.watch(p => { S.pub = p; render(); fillSettings(); }, e => banner(e.message));
-  api.watchAdmin(a => { S.adm = a; render(); }, e => banner(e.message));
-  loadSecret(); loadAdmins();
+  // 관리 화면이 켜져 있는 동안 15초마다 실명·기록을 받아 오며, 이때 서버가 호출·알림 판단도 함께 합니다.
+  api.watchAdmin(a => { banner(''); S.adm = a; render(); fillSettings(); }, e => banner(e.message));
+  loadSecret();
   setInterval(render, 1000);
 }
-function showLogin(msg) { $('#login').hidden = false; $('#main').hidden = true; $('#login-err').textContent = msg || ''; $('#h-state').hidden = true; $('#logout').hidden = !msg; }
-$('#login-btn').addEventListener('click', async () => {
-  try { await api.signOut().catch(() => {}); await api.signInGoogle(); location.reload(); } catch (e) { $('#login-err').textContent = e.message; }
+function showLogin(msg) { $('#login').hidden = false; $('#main').hidden = true; $('#login-err').textContent = msg || ''; $('#h-state').hidden = true; $('#logout').hidden = true; }
+$('#login-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#login-err').textContent = '';
+  const btn = $('#login-btn'); btn.disabled = true;
+  try { await api.op('adminLogin', { password: $('#login-pw').value }); location.reload(); }
+  catch (err) { $('#login-err').textContent = err.message; }
+  finally { btn.disabled = false; }
 });
 $('#logout').addEventListener('click', async () => { await api.signOut(); location.reload(); });
 function banner(m) { $('#banner').innerHTML = m ? `<div class="banner err">${esc(m)}</div>` : ''; }
 async function loadSecret() { try { S.code = (await op('getSecret')).accessCode; $('#s-accessCode').value = S.code; render(); } catch {} }
-async function loadAdmins() { try { S.admins = (await op('admins', { action: 'list' })).admins || []; render(); } catch {} }
 
 function setHTML(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
 const name = t => esc(S.adm.priv[t.id]?.name || t.maskedName);
@@ -101,7 +106,7 @@ function render() {
     <div class="avail ${at.ok ? '' : 'no'}"><span class="dot"></span><span>${esc(at.ok ? '지금 보고 가능' : at.text)}${at.sub ? `<small>${esc(at.sub)}</small>` : ''}</span></div>
     ${timelineHTML(s, dd, t0, dp.busy || null)}
     ${(dp.allDay || []).length ? `<p class="sub">종일 일정(시간 미정 · 호출을 막지 않음): ${dp.allDay.map(esc).join(' / ')}</p>` : ''}
-    <p class="hint">${dd.calendarError ? `<span class="tag red">연동 문제</span> ${esc(dd.calendarError)}` : dd.syncedAt ? `${esc(s.calendarId)} · ${L.hm(dd.syncedAt)} 확인 · 5분마다 자동` : '아직 캘린더를 읽지 않았습니다.'} · 일정이 끝나고 ${s.resumeBufferMin}분 뒤부터 호출합니다.</p>`);
+    <p class="hint">${dd.calendarError ? `<span class="tag red">연동 문제</span> ${esc(dd.calendarError)}` : dd.syncedAt ? `${S.adm.settings?.icalUrl ? '비밀 주소(iCal)' : esc(s.calendarId) + ' 공개 주소'} · ${L.hm(dd.syncedAt)} 확인 · 5분마다 자동` : '아직 캘린더를 읽지 않았습니다.'} · 일정이 끝나고 ${s.resumeBufferMin}분 뒤부터 호출합니다.</p>`);
 
   // 대리 접수 시각
   const sel = $('#p-appt');
@@ -122,10 +127,6 @@ function render() {
     $('#copy-link').addEventListener('click', async () => { try { await navigator.clipboard.writeText(link); toast('링크를 복사했습니다'); } catch { toast('복사하지 못했습니다', '링크를 길게 눌러 직접 복사해 주세요.'); } });
   }
 
-  // 관리자
-  setHTML($('#admins'), `<h2>관리자</h2><div>${S.admins.map(e => `<div class="logi"><span>${esc(e)}</span><button class="btn ghost sm" data-admin-remove="${esc(e)}">빼기</button></div>`).join('') || '<p class="sub">불러오는 중…</p>'}</div>
-    <form id="admin-add" class="row" novalidate><input type="email" id="a-email" placeholder="추가할 구글 이메일" style="flex:1;min-width:180px"><button class="btn ghost sm" type="submit">추가</button></form>`);
-
   // 알림 기록
   const logs = (S.adm.logs || []).slice(0, 40);
   const KIND = { call: '입실 요청', next: '바로 다음 차례', soon: '곧 차례', remind: '재알림', timeout: '시간 초과 취소', overdue: '완료 확인', appt: '지정 10분 전', expired: '마감', uncall: '호출 취소', test: '테스트' };
@@ -134,7 +135,9 @@ function render() {
 
 function fillSettings() {
   if (S.settingsFilled || !S.pub) return;
-  const s = S.pub.settings;
+  if (api.mode === 'server' && !S.adm.settings) return; // 관리자용 설정(비밀 주소 포함)을 받은 뒤 채움
+  const s = { ...S.pub.settings, ...(S.adm.settings || {}) };
+  $('#s-icalUrl').value = s.icalUrl || '';
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'startLimitMin', 'remindMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'defaultMin', 'appointLeadMin']) $('#s-' + k).value = s[k];
   for (const k of ['appointEnabled', 'lunch', 'requirePush']) $('#s-' + k).checked = !!s[k];
   S.settingsFilled = true;
@@ -158,33 +161,25 @@ document.addEventListener('click', async e => {
     if (b.dataset.confirm && !b.dataset.armed) { b.dataset.armed = '1'; const t = b.textContent; b.textContent = '한 번 더 누르면 ' + t; b.classList.add('danger'); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = t; b.classList.remove('danger'); } }, 4000); return; }
     b.disabled = true;
     try {
-      await op(b.dataset.op, { ticketId: b.dataset.id, dir: Number(b.dataset.dir) || undefined });
-      if (b.dataset.op === 'syncCalendar') toast('캘린더를 다시 읽었습니다');
+      const r = await op(b.dataset.op, { ticketId: b.dataset.id, dir: Number(b.dataset.dir) || undefined });
+      if (b.dataset.op === 'syncCalendar') r && r.ok === false ? showError({ message: r.error }) : toast('캘린더를 다시 읽었습니다');
     } catch (err) { showError(err); }
     finally { b.disabled = false; }
     return;
-  }
-  const rm = e.target.closest('[data-admin-remove]');
-  if (rm) { try { await op('admins', { action: 'remove', email: rm.dataset.adminRemove }); await loadAdmins(); } catch (err) { showError(err); } }
-});
-document.addEventListener('submit', async e => {
-  if (e.target.id === 'admin-add') {
-    e.preventDefault();
-    try { await op('admins', { action: 'add', email: $('#a-email').value.trim() }); $('#a-email').value = ''; await loadAdmins(); toast('관리자를 추가했습니다'); } catch (err) { showError(err); }
   }
 });
 $('#set-form').addEventListener('submit', async e => {
   e.preventDefault();
   $('#s-err').textContent = '';
   const values = {};
-  for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd']) values[k] = $('#s-' + k).value.trim();
+  for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'icalUrl']) values[k] = $('#s-' + k).value.trim();
   for (const k of ['startLimitMin', 'remindMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'defaultMin', 'appointLeadMin']) values[k] = Number($('#s-' + k).value);
   for (const k of ['appointEnabled', 'lunch', 'requirePush']) values[k] = $('#s-' + k).checked;
   const code = $('#s-accessCode').value.trim();
   try {
-    await op('settings', { values, accessCode: code && code !== S.code ? code : undefined });
+    const r = await op('settings', { values, accessCode: code && code !== S.code ? code : undefined });
     if (code) S.code = code;
-    toast('설정을 저장했습니다');
+    toast('설정을 저장했습니다', r?.calendar && !r.calendar.ok ? '단, 캘린더를 읽지 못했습니다: ' + r.calendar.error : '');
   } catch (err) { $('#s-err').textContent = err.message; }
 });
 $('#proxy-form').addEventListener('submit', async e => {

@@ -4,10 +4,25 @@ import * as L from './logic.js';
 export const $ = s => document.querySelector(s);
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// 서버에 저장소가 연결되어 있으면 실제 운영, 아니면 데모 모드
 export async function loadApi() {
   const cfg = self.BOGO_CONFIG || {};
-  if (cfg.firebase) return (await import('./api-firebase.js')).create(cfg);
-  return (await import('./api-demo.js')).create();
+  let note = '서버 없이 이 브라우저에서만 동작';
+  if (!cfg.demo && /^https?:$/.test(location.protocol)) {
+    try {
+      const r = await fetch((cfg.apiBase || '') + '/api/state');
+      const j = await r.json().catch(() => null);
+      if (j && j.configured) return (await import('./api-server.js')).create(cfg, j);
+      if (j && j.configured === false) note = '저장소(Upstash Redis) 연결 전이라 이 브라우저에서만 동작';
+      else if (j && j.error) {
+        // 서버는 있는데 잠깐 오류: 데모로 빠지지 않고 실제 운영 화면에서 오류를 보여 줍니다.
+        return (await import('./api-server.js')).create(cfg, null);
+      }
+    } catch {}
+  }
+  const api = (await import('./api-demo.js')).create();
+  api.demoNote = note;
+  return api;
 }
 
 // 알림 소리(화면이 켜져 있을 때)
@@ -60,7 +75,7 @@ export function timelineHTML(s, dayDoc, now, titled) {
   const nowm = now >= ws && now < we ? `<i class="nowm" style="left:${pct(now)}%"></i>` : '';
   const list = (titled || (dayDoc.busy || []).map(b => ({ ...b, title: '일정 있음' })));
   return `<div class="tl" aria-hidden="true">${bars}${nowm}</div>
-    <div class="tl-l num"><span>${L.hm(ws)}</span><span>${L.hm((ws + we) / 2)}</span><span>${L.hm(we)}</span></div>
+    <div class="tl-l num"><span>${L.hm(ws)}</span><span>${L.hm((ws + we) / 2)}</span><span>${esc(c.s.workEnd)}</span></div>
     ${list.length ? `<div class="evs">${list.map(b => `<div><span class="num">${L.hm(b.s)}~${L.hm(b.e)}</span><span>${esc(b.title)}</span></div>`).join('')}</div>` : '<p class="sub">오늘 국장님 캘린더에 시간이 정해진 일정이 없습니다.</p>'}`;
 }
 
@@ -71,7 +86,7 @@ export function demoBar(api, onChange) {
   bar.className = 'demobar';
   const draw = () => {
     const off = api.demo.offsetMin();
-    bar.innerHTML = `<b>데모 모드</b><span class="sub">서버 없이 이 브라우저에서만 동작 · ${off ? `시간 +${off}분` : '실제 시각'}</span>
+    bar.innerHTML = `<b>데모 모드</b><span class="sub">${api.demoNote || '서버 없이 이 브라우저에서만 동작'} · ${off ? `시간 +${off}분` : '실제 시각'}</span>
       <label>보는 사람 <select id="demo-user">${api.demo.users.map(u => `<option value="${u.uid}" ${u.uid === api.demo.uid ? 'selected' : ''}>${u.label}</option>`).join('')}</select></label>
       <span class="grp"><button type="button" data-adv="1">+1분</button><button type="button" data-adv="5">+5분</button><button type="button" data-adv="30">+30분</button></span>
       <button type="button" data-reset>처음부터</button>`;

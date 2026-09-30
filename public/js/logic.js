@@ -11,10 +11,11 @@ export const OPEN = ['held', 'waiting', 'called', 'in_progress'];
 
 export const DEFAULTS = {
   officeName: '국장실',
-  workStart: '09:00',
-  workEnd: '18:00',
+  workStart: '07:00',
+  workEnd: '24:00',       // 24:00 = 자정까지
   lunch: true,
   calendarId: 'rdarndpolicy@gmail.com',
+  icalUrl: '',           // 비우면 calendarId의 공개 iCal 주소 사용. 비공개 캘린더는 '비밀 주소(iCal 형식)'를 넣습니다.
   soonAhead: 2,          // '곧 차례': 앞 대기 N명 이하
   soonMin: 20,           // 그리고 예상 대기 N분 이내
   startLimitMin: 5,      // 호출 후 N분 안에 '보고 시작'이 없으면 자동 취소
@@ -35,10 +36,13 @@ export function withDefaults(s) {
 
 // ---------- 시간 도우미 ----------
 export function dayKey(ms) { return new Date(ms + KST).toISOString().slice(0, 10); }
-export function at(day, hhmm) { return Date.parse(`${day}T${hhmm}:00+09:00`); }
+export function at(day, hhmm) {
+  if (hhmm === '24:00') return Date.parse(`${day}T00:00:00+09:00`) + 86400000; // 자정
+  return Date.parse(`${day}T${hhmm}:00+09:00`);
+}
 export function hm(ms) { return new Date(ms + KST).toISOString().slice(11, 16); }
 export function pad(no) { return String(no ?? 0).padStart(3, '0'); }
-export function validHM(v) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(v || ''); }
+export function validHM(v) { return v === '24:00' || /^([01]\d|2[0-3]):[0-5]\d$/.test(v || ''); }
 export function maskName(n) {
   n = String(n || '').trim();
   if (n.length <= 1) return n;
@@ -370,10 +374,15 @@ export function cleanSettings(input) {
   const o = {};
   const num = (k, lo, hi) => { if (input[k] != null) { const v = Number(input[k]); if (!(v >= lo && v <= hi)) fail('invalid-argument', `${k} 값이 범위를 벗어났습니다.`); o[k] = v; } };
   if (input.officeName != null) o.officeName = String(input.officeName).trim().slice(0, 20) || '국장실';
-  for (const k of ['workStart', 'workEnd']) if (input[k] != null) { if (!validHM(input[k])) fail('invalid-argument', '시각은 09:00처럼 입력해 주세요.'); o[k] = input[k]; }
+  for (const k of ['workStart', 'workEnd']) if (input[k] != null) { if (!validHM(input[k])) fail('invalid-argument', '시각은 07:00처럼 입력해 주세요(자정은 24:00).'); o[k] = input[k]; }
   if ((o.workStart || '00:00') >= (o.workEnd || '99:99')) fail('invalid-argument', '보고 시작 시각이 종료 시각보다 빨라야 합니다.');
   for (const k of ['lunch', 'appointEnabled', 'requirePush']) if (input[k] != null) o[k] = !!input[k];
   if (input.calendarId != null) o.calendarId = String(input.calendarId).trim().slice(0, 200);
+  if (input.icalUrl != null) {
+    const u = String(input.icalUrl).trim();
+    if (u && !/^https:\/\/\S+$/.test(u)) fail('invalid-argument', 'iCal 주소는 https://로 시작해야 합니다.');
+    o.icalUrl = u.slice(0, 500);
+  }
   num('soonAhead', 1, 10); num('soonMin', 5, 120); num('startLimitMin', 2, 30); num('remindMin', 1, 29);
   num('resumeBufferMin', 0, 30); num('appointLeadMin', 0, 240); num('defaultMin', 3, 60);
   if (o.remindMin != null && o.startLimitMin != null && o.remindMin >= o.startLimitMin) fail('invalid-argument', '재알림은 자동 취소보다 먼저여야 합니다.');

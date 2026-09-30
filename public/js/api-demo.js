@@ -40,7 +40,7 @@ function seedDay(st, now) {
 }
 
 function fresh(now) {
-  const st = { v: 1, offset: 0, settings: { ...L.DEFAULTS, requirePush: true }, devices: {}, accessCode: '1234', admins: ['demo@example.com'] };
+  const st = { v: 1, offset: 0, settings: { ...L.DEFAULTS, requirePush: true }, devices: {}, accessCode: '1234' };
   seedDay(st, now);
   return st;
 }
@@ -94,7 +94,8 @@ export function create() {
     async ready() { return { uid, isAnonymous: true }; },
     user: () => ({ uid, email: 'demo@example.com', isAnonymous: false }),
     async signInAnon() { return api.user(); },
-    async signInGoogle() { return api.user(); },
+    hasMember: () => true,
+    hasAdmin: () => true,
     async signOut() { location.reload(); },
     async refreshToken() {},
     now,
@@ -114,7 +115,7 @@ export function create() {
       try {
         switch (name) {
           case 'join': if (String(d.code) !== st.accessCode) throw { code: 'permission-denied', message: '접수 코드가 맞지 않습니다.' }; return { ok: true };
-          case 'me': return { member: true, isAdmin: true, verified: !!st.devices[uid]?.verified, email: 'demo@example.com' };
+          case 'me': return { member: true, isAdmin: true, uid, verified: !!st.devices[uid]?.verified };
           case 'issue': {
             const r = L.actIssue(d, ctx, st.tickets, st.settings, st.dayDoc, t0);
             const id = 'd' + Math.random().toString(36).slice(2, 9);
@@ -143,12 +144,8 @@ export function create() {
           }
           case 'getSecret': return { accessCode: st.accessCode };
           case 'syncCalendar': st.dayDoc.syncedAt = t0; st.dayPrivate.syncedAt = t0; break;
-          case 'admins': {
-            if (d.action === 'add' && d.email && !st.admins.includes(d.email)) st.admins.push(String(d.email).toLowerCase());
-            if (d.action === 'remove') st.admins = st.admins.filter(e => e !== d.email);
-            save(st); return { admins: st.admins, ok: true };
-          }
-          case 'registerDevice': case 'testPush': case 'confirmPush': case 'tick': break;
+          case 'registerPush': case 'testPush': case 'confirmPush': case 'tick': case 'state': case 'adminState': break;
+          case 'adminLogin': return { ok: true };
           default: throw { code: 'invalid-argument', message: '알 수 없는 요청: ' + name };
         }
         commit(st);

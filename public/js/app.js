@@ -39,6 +39,7 @@ $('#gate-form').addEventListener('submit', async e => {
 
 function start(me) {
   S.me = me;
+  if (api.mode !== 'demo') S.uid = me.uid; // 서버가 알려 주는 이 기기의 표식
   $('#nav').hidden = false;
   api.watch(pub => { S.pub = pub; render(); checkInitialTab(); }, e => { $('#banner').innerHTML = `<div class="banner err">${esc(e.message)}</div>`; });
   api.onMessage(m => { toast(m.title, m.body, m.kind === 'call' ? 'call' : ''); beep(m.kind === 'call'); });

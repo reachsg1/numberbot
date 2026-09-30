@@ -1,17 +1,13 @@
-// 1분마다 불리는 판단 창구: GET /api/tick?key=<CRON_SECRET>
-// cron-job.org가 1분마다 부르고, Vercel 자체 예약(하루 1번)도 밤 정리용으로 부릅니다.
-import { getServer } from '../lib/firebase.js';
+// 예약 작업용: GET /api/tick  (Vercel 매일 예약 · cron-job.org 1분마다 · 선택)
+// 환경 변수 CRON_SECRET을 정했다면 ?key=값 또는 Authorization: Bearer 값이 맞아야 합니다.
+import { server, fail } from './_srv.js';
 
 export default async function handler(req, res) {
-  const secret = process.env.CRON_SECRET;
-  const given = req.query?.key || (req.headers.authorization || '').replace(/^Bearer /, '');
-  if (!secret) return res.status(500).json({ error: 'Vercel 환경 변수 CRON_SECRET이 없습니다.' });
-  if (given !== secret) return res.status(401).json({ error: '키가 맞지 않습니다.' });
-  try {
-    const out = await getServer().runTick();
-    res.status(200).json({ ok: true, ...out });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+  res.setHeader('Cache-Control', 'no-store');
+  const want = process.env.CRON_SECRET;
+  if (want) {
+    const got = String(req.query?.key || String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+    if (got !== want) return res.status(401).json({ error: { code: 'unauthenticated', message: 'key가 맞지 않습니다.' } });
   }
+  try { res.status(200).json(await server().runTick()); } catch (e) { fail(res, e); }
 }
