@@ -179,7 +179,7 @@ export function noticeText(kind, t, sIn, extra = {}) {
   const no = pad(t.no), o = s.officeName;
   switch (kind) {
     case 'call': return { title: `${no}번, 지금 입실해 주세요`, body: `${o}에 들어가며 '보고 시작'을 눌러 주세요. ${s.startLimitMin}분 안에 누르지 않으면 자동 취소됩니다.` };
-    case 'next': return { title: '바로 다음 차례입니다', body: `${o} 문 앞에서 기다려 주세요. 앞 보고가 끝나면 바로 호출됩니다.` };
+    case 'next': return { title: '바로 다음 차례입니다', body: `앞 분이 보고를 시작했습니다. ${o} 문 앞에서 기다려 주세요. 앞 보고가 끝나면 바로 호출됩니다.` };
     case 'soon': return { title: '곧 차례입니다', body: `앞 대기 ${extra.ahead ?? '-'}명, ${extra.etaAt ? hm(extra.etaAt) + '경' : '곧'} 호출 예상입니다. ${o} 근처로 와 주세요.` };
     case 'remind': return { title: "'보고 시작'을 눌러 주세요", body: `${s.startLimitMin - s.remindMin}분 안에 누르지 않으면 번호표가 자동 취소됩니다.` };
     case 'timeout': return { title: '번호표가 취소되었습니다', body: `${s.startLimitMin}분 안에 '보고 시작'이 없어 다음 분을 호출했습니다. 사정이 있었다면 비서실에 말씀해 주세요.` };
@@ -233,13 +233,14 @@ export function tick(ticketsIn, sIn, dayDoc, now) {
       note(w, 'call');
     }
   }
-  // 6) 바로 다음 차례 · 곧 차례 · 지정 시각 10분 전
+  // 6) 바로 다음 차례(앞 사람 보고 시작 시) · 곧 차례 · 지정 시각 10분 전
   const q = computeQueue(T, s, dayDoc, now);
   for (const t of q.waiting) {
     const e = q.eta[t.id];
     const mins = e == null ? Infinity : (e - now) / MIN;
     const a = q.ahead[t.id];
-    if (a === 1 && q.active.length && mins <= s.soonMin && !t.flags.next) { flag(t, 'next', 'soon'); note(t, 'next'); }
+    // 앞 사람이 '보고 시작'을 누르면(보고 중) 바로 다음 사람에게 '문 앞 대기' 알림 — 예상 시간과 관계없이
+    if (a === 1 && q.active.some(x => x.status === 'in_progress') && !t.flags.next) { flag(t, 'next', 'soon'); note(t, 'next'); }
     else if (a <= s.soonAhead && mins <= s.soonMin && !t.flags.soon && !t.flags.next) { flag(t, 'soon'); note(t, 'soon', { ahead: a, etaAt: e }); }
   }
   for (const t of q.held) {

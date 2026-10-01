@@ -60,7 +60,7 @@ test('엔진: 자동 호출 → 다음 차례 알림 → 재알림 → 5분 시�
   let r = L.tick(ts, S, {}, T('09:30'));
   ts = apply(ts, r);
   assert.equal(ts.find(t => t.id === 'A').status, 'called');
-  assert.deepEqual(r.notices.map(n => n.id + ':' + n.kind), ['A:call', 'B:next', 'C:soon']);
+  assert.deepEqual(r.notices.map(n => n.id + ':' + n.kind), ['A:call', 'B:soon', 'C:soon'], '호출 단계에서는 다음 사람에게 곧 차례만');
   r = L.tick(ts, S, {}, T('09:31')); ts = apply(ts, r);
   assert.equal(r.notices.length, 0, '같은 알림을 두 번 보내지 않음');
   r = L.tick(ts, S, {}, T('09:33')); ts = apply(ts, r);
@@ -68,7 +68,13 @@ test('엔진: 자동 호출 → 다음 차례 알림 → 재알림 → 5분 시�
   r = L.tick(ts, S, {}, T('09:35')); ts = apply(ts, r);
   assert.equal(ts.find(t => t.id === 'A').status, 'timeout');
   assert.equal(ts.find(t => t.id === 'B').status, 'called');
-  assert.deepEqual(r.notices.map(n => n.id + ':' + n.kind), ['A:timeout', 'B:call', 'C:next']);
+  assert.deepEqual(r.notices.map(n => n.id + ':' + n.kind), ['A:timeout', 'B:call']);
+  // B가 '보고 시작'을 누르면 바로 다음 C에게 문 앞 대기 알림
+  ts = ts.map(t => t.id === 'B' ? { ...t, status: 'in_progress', startedAt: T('09:36') } : t);
+  r = L.tick(ts, S, {}, T('09:36')); ts = apply(ts, r);
+  assert.deepEqual(r.notices.map(n => n.id + ':' + n.kind), ['C:next']);
+  r = L.tick(ts, S, {}, T('09:37'));
+  assert.equal(r.notices.length, 0);
 });
 
 test('엔진: 보고 시작 후 완료 → 즉시 다음 호출, 회의 중에는 보류 후 회의+5분에 호출', () => {

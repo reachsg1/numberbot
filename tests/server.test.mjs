@@ -108,7 +108,7 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
   assert.equal(byNo(1).status, 'called', '발급과 동시에 자동 호출');
   await op('b', { op: 'issue', name: '이서연', dept: '총괄' });
   await op('c', { op: 'issue', name: '박준호', dept: '운영' });
-  assert.deepEqual(got(from), ['a:call', 'b:next', 'c:soon']);
+  assert.deepEqual(got(from), ['a:call', 'b:soon', 'c:soon']);
   // 캘린더는 상태 확인 때 읽힘
   assert.ok(calls.some(u => u.includes('calendar.google.com/calendar/ical/rdarndpolicy%40gmail.com/public/basic.ics')));
   assert.deepEqual(day().busy.map(b => L.hm(b.s) + '-' + L.hm(b.e)), ['10:30-11:30']);
@@ -116,12 +116,14 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
 
   // 남의 번호표는 못 누름
   await assert.rejects(op('b', { op: 'start', ticketId: r1.id }), { code: 'permission-denied' });
-  setNow(T('09:22')); await op('a', { op: 'start', ticketId: r1.id });
+  setNow(T('09:22')); from = inbox.length; await op('a', { op: 'start', ticketId: r1.id });
   assert.equal(byNo(1).status, 'in_progress');
+  assert.deepEqual(got(from), ['b:next'], '보고 시작을 누르면 다음 사람에게 문 앞 대기 알림');
+  assert.match(inbox.at(-1).body, /앞 분이 보고를 시작/);
   setNow(T('09:34')); from = inbox.length;
   await op('a', { op: 'complete', ticketId: r1.id });
   assert.equal(byNo(1).status, 'done'); assert.equal(byNo(2).status, 'called');
-  assert.deepEqual(got(from), ['b:call', 'c:next']);
+  assert.deepEqual(got(from), ['b:call']);
 
   // B는 입실하지 않음 → 3분 재알림 → 5분 자동 취소 → C 호출 (상태 조회만으로 진행)
   setNow(T('09:37')); from = inbox.length; await srv.publicState();
