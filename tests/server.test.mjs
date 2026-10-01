@@ -35,6 +35,7 @@ function phone(name) {
 const ICS = [
   'BEGIN:VCALENDAR', 'VERSION:2.0',
   'BEGIN:VEVENT', 'DTSTART;TZID=Asia/Seoul:20260930T103000', 'DTEND;TZID=Asia/Seoul:20260930T113000', 'UID:e1', 'SUMMARY:국정감사 대비 간부회의', 'END:VEVENT',
+  'BEGIN:VEVENT', 'DTSTART;TZID=Asia/Seoul:20260930T140000', 'DTEND;TZID=Asia/Seoul:20260930T150000', 'UID:e3', 'SUMMARY:농식품부 협의', 'LOCATION:정부세종청사', 'END:VEVENT',
   'BEGIN:VEVENT', 'DTSTART;VALUE=DATE:20260930', 'DTEND;VALUE=DATE:20261001', 'UID:e2', 'SUMMARY:실국장 만찬', 'END:VEVENT',
   'END:VCALENDAR',
 ].join('\r\n');
@@ -97,7 +98,7 @@ test('접수 코드 → 알림 테스트(실제 암호화 푸시 복호화) → 
   await assert.rejects(op('a', { op: 'move', ticketId: r.id, dir: 1 }), { code: 'permission-denied' });
 });
 
-test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞 알림 → 5분 초과 취소 → 캘린더 → 밤 정리', async () => {
+test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞 알림 → 3분 초과 취소 → 캘린더 → 밤 정리', async () => {
   const { srv, op, ready, admin, byNo, day, got, setNow, calls, inbox } = setup();
   for (const u of ['a', 'b', 'c']) await ready(u);
   await admin();
@@ -111,7 +112,7 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
   assert.deepEqual(got(from), ['a:call', 'b:soon', 'c:soon']);
   // 캘린더는 상태 확인 때 읽힘
   assert.ok(calls.some(u => u.includes('calendar.google.com/calendar/ical/rdarndpolicy%40gmail.com/public/basic.ics')));
-  assert.deepEqual(day().busy.map(b => L.hm(b.s) + '-' + L.hm(b.e)), ['10:30-11:30']);
+  assert.deepEqual(day().busy.map(b => L.hm(b.s) + '-' + L.hm(b.e) + (b.ext ? ' 대외' : '')), ['10:30-11:30', '14:00-15:00 대외']);
   assert.equal(day().allDayCount, 1);
 
   // 남의 번호표는 못 누름
@@ -125,10 +126,13 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
   assert.equal(byNo(1).status, 'done'); assert.equal(byNo(2).status, 'called');
   assert.deepEqual(got(from), ['b:call']);
 
-  // B는 입실하지 않음 → 3분 재알림 → 5분 자동 취소 → C 호출 (상태 조회만으로 진행)
-  setNow(T('09:37')); from = inbox.length; await srv.publicState();
+  // B는 입실하지 않음 → 1분마다 재알림 → 3분 지나면 자동 취소 → C 호출 (상태 조회만으로 진행)
+  setNow(T('09:35')); from = inbox.length; await srv.publicState();
   assert.deepEqual(got(from), ['b:remind']);
-  setNow(T('09:39')); from = inbox.length; await srv.publicState();
+  setNow(T('09:36')); from = inbox.length; await srv.publicState();
+  assert.deepEqual(got(from), ['b:remind']);
+  assert.match(inbox.at(-1).body, /1분 안에/);
+  setNow(T('09:37')); from = inbox.length; await srv.publicState();
   assert.equal(byNo(2).status, 'timeout'); assert.equal(byNo(3).status, 'called');
   assert.deepEqual(got(from), ['b:timeout', 'c:call']);
 
@@ -209,4 +213,30 @@ test('무료 한도: 한가할 때 상태 조회 1회 = Redis 명령 1개', asyn
   const perDay = redis.commands - c1;
   assert.ok(perDay < 12000, '하루 ' + perDay + '개');
   console.log(`  하루 종일 10초마다 조회해도 Redis 명령 약 ${perDay}개/일 (무료 50만/월)`);
+});
+
+test('대외 일정: 자동 판단, 관리자가 바꾸기, 공개 화면에는 제목 없이 대외 표시만', async () => {
+  const { srv, op, admin, setNow } = setup();
+  await admin();
+  const r = await op('adm', { op: 'syncCalendar' });
+  const ev = r.admin.dayPrivate.busy;
+  assert.deepEqual(ev.map(b => b.title + ':' + b.ext), ['국정감사 대비 간부회의:false', '농식품부 협의:true']);
+  assert.deepEqual(r.state.dayDoc.busy.map(b => !!b.ext), [false, true]);
+  assert.doesNotMatch(JSON.stringify(r.state), /농식품부|간부회의/);
+  // 정부세종청사(120km) → 복귀 80분 → 15:00 종료 후 16:20부터 보고 가능
+  assert.equal(r.state.dayDoc.busy[1].ret, 80);
+  assert.equal(ev[1].place, '정부세종청사');
+  setNow(T('15:30')); let pub = await srv.publicState();
+  assert.equal(L.availability(pub.settings, pub.dayDoc, T('16:10')).ok, false);
+  assert.equal(L.availability(pub.settings, pub.dayDoc, T('16:20')).ok, true);
+  // 관리자가 '내부'로 바꾸면 여유 5분만
+  const r2 = await op('adm', { op: 'eventExt', key: ev[1].key, ext: false });
+  assert.equal(r2.state.dayDoc.busy[1].ext, undefined);
+  assert.equal(L.availability(r2.state.settings, r2.state.dayDoc, T('15:30')).ok, true);
+  // 다시 읽어도 관리자가 바꾼 값 유지
+  const r3 = await op('adm', { op: 'syncCalendar' });
+  assert.equal(r3.admin.dayPrivate.busy[1].ext, false);
+  await op('adm', { op: 'eventExt', key: ev[1].key, ext: null });
+  setNow(T('15:31')); pub = await srv.publicState();
+  assert.equal(pub.dayDoc.busy[1].ext, true, '자동 판단으로 되돌림');
 });

@@ -1,6 +1,6 @@
 // 관리 화면(비서실): 국장님 부재 설정 · 순서 조정 · 앱 상태 관리
 import * as L from './logic.js';
-import { $, esc, loadApi, toast, showError, availText, timelineHTML, demoBar, statusLabel, mmss, minsAgo } from './ui.js';
+import { $, esc, loadApi, toast, showError, availText, timelineHTML, demoBar, statusLabel, mmss, minsAgo, attachOrgPicker } from './ui.js';
 
 const api = await loadApi();
 const S = { pub: null, adm: { priv: {}, dayPrivate: {}, logs: [] }, code: '', settingsFilled: false, noteDraft: null };
@@ -56,22 +56,23 @@ function render() {
       <button type="button" data-presence="present" aria-pressed="${pm === 'present'}">재실</button>
     </div>
     <div class="field"><label for="pr-note">부재 안내 문구 (모두에게 표시)</label><input type="text" id="pr-note" maxlength="60" placeholder="예: 11시 30분까지 외부 회의" value="${esc(noteVal)}"></div>
-    <p class="hint">부재: 호출을 멈춥니다(번호표 접수는 계속). 재실: 회의가 일찍 끝났을 때 누르면, 지금 걸린 일정을 무시하고 바로 호출을 재개합니다.</p>`);
+    <p class="hint">부재: 호출을 멈춥니다(번호표 접수는 계속). 재실: 회의가 일찍 끝났거나 <b>대외 일정에서 예상보다 일찍 복귀</b>하셨을 때 누르면, 지금 걸린 일정·복귀 시간을 무시하고 바로 보고 가능으로 바뀝니다.</p>`);
 
   // 요약
   const done = P.tickets.filter(t => t.status === 'done');
-  setHTML($('#summary'), `<div class="stat"><small>대기</small><b>${q.waiting.length}</b></div><div class="stat"><small>시간 지정</small><b>${q.held.length}</b></div><div class="stat"><small>오늘 완료</small><b>${done.length}</b></div><div class="stat"><small>평균 보고</small><b>${Math.round(q.avg / 60000)}<span class="u">분</span></b></div>`);
+  setHTML($('#summary'), `<div class="stat"><small>대기</small><b>${q.waiting.length}</b></div><div class="stat"><small>호출·보고 중</small><b>${q.active.length}</b></div><div class="stat"><small>오늘 완료</small><b>${done.length}</b></div><div class="stat"><small>평균 보고</small><b>${Math.round(q.avg / 60000)}<span class="u">분</span></b></div>`);
 
   // 지금
   const nowHTML = q.active.length ? q.active.map(t => {
     const called = t.status === 'called';
-    const overdue = !called && t0 - t.startedAt >= q.avg + 20 * L.MIN;
-    const left = called ? t.calledAt + s.startLimitMin * L.MIN - t0 : 0;
+    const exp = L.expectedMs(t, s);
+    const overdue = !called && t0 - t.startedAt >= exp;
+    const left = called ? t.calledAt + s.callLimitMin * L.MIN - t0 : 0;
     return `<div class="card nowcard ${called ? '' : 'prog'}">
       <div class="row between"><h3 style="color:${called ? 'var(--red)' : 'var(--accent)'}">${called ? `호출됨 · ${L.hm(t.calledAt)} · 자동 취소까지 ${mmss(left)}` : `보고 중 · ${L.hm(t.startedAt)} 시작 · ${minsAgo(t.startedAt, t0)}분 경과`}</h3>${t.proxy ? '<span class="tag">대리 접수</span>' : ''}${t.flags?.pushFail ? '<span class="tag red">알림 실패</span>' : ''}</div>
       <div class="row"><span class="num" style="font-size:30px;font-weight:600">${L.pad(t.no)}</span><b>${name(t)}</b><span class="sub">${esc(t.dept)}${t.refMin ? ` · 예상 ${t.refMin}분` : ''}</span></div>
       ${topic(t) ? `<p>${esc(topic(t))}</p>` : ''}
-      ${overdue ? `<div class="banner err"><b>완료 누락 의심</b> · 평균보다 20분 이상 길어졌습니다. 보고가 끝났다면 대신 완료해 주세요.</div>` : ''}
+      ${overdue ? `<div class="banner err"><b>예상 시간(${Math.round(exp / 60000)}분) 초과</b> · 본인에게 ${s.overdueEveryMin}분마다 '보고 완료' 확인 알림을 보내는 중입니다${t.flags?.overdueN ? `(${t.flags.overdueN}회)` : ''}. 보고가 끝났다면 대신 완료해 주세요.</div>` : ''}
       <div class="actions">${called ? `<button class="btn ghost sm" data-op="start" data-id="${t.id}">대신 보고 시작</button><button class="btn ghost sm" data-op="cancel" data-id="${t.id}" data-confirm="1">호출 취소</button>` : `<button class="btn ${overdue || t.proxy ? '' : 'ghost'} sm" data-op="complete" data-id="${t.id}" data-confirm="1">대신 보고 완료</button>`}</div>
     </div>`;
   }).join('') : `<div class="card"><h3>지금</h3><p class="sub">${at.ok ? (q.waiting.length ? '곧 서버가 다음 분을 호출합니다.' : '대기 중인 분이 없습니다.') : `${esc(at.text)} · ${esc(at.sub || '')} — 호출을 멈춘 상태입니다.`}</p></div>`;
@@ -79,17 +80,10 @@ function render() {
 
   // 대기 순서
   setHTML($('#queue'), `<div class="row between"><h2>대기 순서</h2><span class="sub">앞 ${s.soonAhead}명 이내 + ${s.soonMin}분 안이면 '곧 차례' 자동 알림</span></div>
-    <div>${q.waiting.length ? q.waiting.map((t, i) => `<div class="arow"><div class="l1"><span class="num">${L.pad(t.no)}</span><b>${name(t)}</b><span class="sub">${esc(t.dept)}</span>${t.urgent ? '<span class="tag amber">긴급</span>' : ''}${t.appointAt ? `<span class="tag">${L.hm(t.appointAt)} 지정</span>` : ''}${t.proxy ? '<span class="tag">대리</span>' : ''}${t.flags?.next ? '<span class="tag ok">문 앞 대기 알림</span>' : t.flags?.soon ? '<span class="tag ok">곧 차례 알림</span>' : ''}${t.flags?.pushFail ? '<span class="tag red">알림 실패</span>' : ''}</div>
+    <div>${q.waiting.length ? q.waiting.map((t, i) => `<div class="arow"><div class="l1"><span class="num">${L.pad(t.no)}</span><b>${name(t)}</b><span class="sub">${esc(t.dept)}</span>${t.urgent ? '<span class="tag amber">긴급</span>' : ''}${t.proxy ? '<span class="tag">대리</span>' : ''}${t.flags?.next ? '<span class="tag ok">문 앞 대기 알림</span>' : t.flags?.soon ? '<span class="tag ok">곧 차례 알림</span>' : ''}${t.flags?.pushFail ? '<span class="tag red">알림 실패</span>' : ''}</div>
       ${topic(t) ? `<div>${esc(topic(t))}</div>` : ''}
       <div class="l2"><span>${L.hm(t.createdAt)} 접수</span>${t.refMin ? `<span>예상 ${t.refMin}분</span>` : ''}<span>${q.eta[t.id] ? L.hm(q.eta[t.id]) + '경 호출 예상' : '오늘 중 어려움'}</span></div>
       <div class="actions"><button class="btn ghost sm" data-op="move" data-dir="-1" data-id="${t.id}" ${i === 0 ? 'disabled' : ''} aria-label="한 칸 위로">▲</button><button class="btn ghost sm" data-op="move" data-dir="1" data-id="${t.id}" ${i === q.waiting.length - 1 ? 'disabled' : ''} aria-label="한 칸 아래로">▼</button>${i > 0 ? `<button class="btn ghost sm" data-op="urgent" data-id="${t.id}">긴급 · 맨 앞</button>` : ''}<button class="btn ghost sm" data-op="cancel" data-id="${t.id}" data-confirm="1">취소</button></div></div>`).join('') : '<p class="empty">대기 중인 분이 없습니다.</p>'}</div>`);
-
-  // 시간 지정
-  setHTML($('#held'), `<div class="row between"><h2>시간 지정</h2><span class="sub">${s.appointEnabled ? '접수 받는 중' : '새 지정 받지 않음'}</span></div>
-    <div>${q.held.length ? q.held.map(t => `<div class="arow"><div class="l1"><span class="num">${L.hm(t.appointAt)}</span><span class="num sub">${L.pad(t.no)}</span><b>${name(t)}</b><span class="sub">${esc(t.dept)}</span>${t.flags?.appt ? '<span class="tag ok">10분 전 알림</span>' : ''}</div>
-      ${topic(t) ? `<div>${esc(topic(t))}</div>` : ''}
-      <div class="l2"><span>${q.eta[t.id] ? L.hm(q.eta[t.id]) + '경 호출 예상' : '오늘 중 어려움'}</span></div>
-      <div class="actions"><button class="btn ghost sm" data-op="urgent" data-id="${t.id}">지금 대기열 맨 앞으로</button><button class="btn ghost sm" data-op="cancel" data-id="${t.id}" data-confirm="1">취소</button></div></div>`).join('') : '<p class="empty">시간 지정 번호표가 없습니다.</p>'}</div>`);
 
   // 끝난 번호표
   const closed = P.tickets.filter(t => ['done', 'timeout', 'cancelled', 'expired'].includes(t.status)).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
@@ -104,15 +98,9 @@ function render() {
   const dd = P.dayDoc || {};
   setHTML($('#sched'), `<div class="row between"><h2>오늘 국장님 일정</h2><button class="btn ghost sm" data-op="syncCalendar">지금 다시 읽기</button></div>
     <div class="avail ${at.ok ? '' : 'no'}"><span class="dot"></span><span>${esc(at.ok ? '지금 보고 가능' : at.text)}${at.sub ? `<small>${esc(at.sub)}</small>` : ''}</span></div>
-    ${timelineHTML(s, dd, t0, dp.busy || null)}
+    ${timelineHTML(s, dd, t0, dp.busy || null, { admin: true })}
     ${(dp.allDay || []).length ? `<p class="sub">종일 일정(시간 미정 · 호출을 막지 않음): ${dp.allDay.map(esc).join(' / ')}</p>` : ''}
     <p class="hint">${dd.calendarError ? `<span class="tag red">연동 문제</span> ${esc(dd.calendarError)}` : dd.syncedAt ? `${S.adm.settings?.icalUrl ? '비밀 주소(iCal)' : esc(s.calendarId) + ' 공개 주소'} · ${L.hm(dd.syncedAt)} 확인 · 5분마다 자동` : '아직 캘린더를 읽지 않았습니다.'} · 일정이 끝나고 ${s.resumeBufferMin}분 뒤부터 호출합니다.</p>`);
-
-  // 대리 접수 시각
-  const sel = $('#p-appt');
-  const slots = L.appointSlots(P.tickets, { ...s, appointLeadMin: 0 }, dd, t0);
-  const key = slots.map(x => x.at).join(',');
-  if (sel.dataset.key !== key) { const cur = sel.value; sel.innerHTML = '<option value="">지금 줄 서기</option>' + slots.map(x => `<option value="${x.at}">${L.hm(x.at)} 지정${x.count ? ` (이미 ${x.count}명)` : ''}</option>`).join(''); sel.value = cur; sel.dataset.key = key; }
 
   // 접수 안내 QR
   const link = location.origin + '/?code=' + encodeURIComponent(S.code || '');
@@ -129,7 +117,7 @@ function render() {
 
   // 알림 기록
   const logs = (S.adm.logs || []).slice(0, 40);
-  const KIND = { call: '입실 요청', next: '바로 다음 차례', soon: '곧 차례', remind: '재알림', timeout: '시간 초과 취소', overdue: '완료 확인', appt: '지정 10분 전', expired: '마감', uncall: '호출 취소', test: '테스트' };
+  const KIND = { call: '입실 요청', next: '바로 다음 차례', soon: '곧 차례', remind: '재알림', timeout: '시간 초과 취소', overdue: '완료 확인', expired: '마감', uncall: '호출 취소', test: '테스트' };
   setHTML($('#logs'), `<h2>오늘 알림 기록</h2><div>${logs.map(l => `<div class="logi"><span><span class="num">${L.hm(l.at)}</span> · ${L.pad(l.no)}번 · ${KIND[l.kind] || l.kind}</span>${l.ok ? '<span class="tag ok">전달</span>' : `<span class="tag red" title="${esc(l.error || '')}">${l.error === 'no-device' ? '대리 접수' : '실패'}</span>`}</div>`).join('') || '<p class="sub">아직 보낸 알림이 없습니다.</p>'}</div>`);
 }
 
@@ -138,8 +126,9 @@ function fillSettings() {
   if (api.mode === 'server' && !S.adm.settings) return; // 관리자용 설정(비밀 주소 포함)을 받은 뒤 채움
   const s = { ...S.pub.settings, ...(S.adm.settings || {}) };
   $('#s-icalUrl').value = s.icalUrl || '';
-  for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'startLimitMin', 'remindMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'defaultMin', 'appointLeadMin']) $('#s-' + k).value = s[k];
-  for (const k of ['appointEnabled', 'lunch', 'requirePush']) $('#s-' + k).checked = !!s[k];
+  for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) $('#s-' + k).value = s[k];
+  for (const k of ['extKeywords', 'localKeywords', 'places']) $('#s-' + k).value = String(s[k] || '').split(',').map(x => x.trim()).join(', ');
+  for (const k of ['lunch', 'requirePush']) $('#s-' + k).checked = !!s[k];
   S.settingsFilled = true;
 }
 
@@ -154,6 +143,13 @@ document.addEventListener('click', async e => {
       if (pr.dataset.presence === 'present' && r.presence?.mode === 'auto') toast('지금 걸린 일정이 없어 자동 상태로 둡니다');
       else toast('국장님 상태를 바꿨습니다', pr.dataset.presence === 'absent' ? '자동 호출을 멈췄습니다.' : pr.dataset.presence === 'present' ? '호출을 바로 재개합니다.' : '캘린더대로 호출합니다.');
     } catch (err) { showError(err); }
+    return;
+  }
+  const xb = e.target.closest('[data-ext-key]');
+  if (xb) {
+    xb.disabled = true;
+    try { await op('eventExt', { key: xb.dataset.extKey, ext: xb.dataset.extTo === '1' }); toast(xb.dataset.extTo === '1' ? '대외 일정으로 바꿨습니다' : '내부 일정으로 바꿨습니다', xb.dataset.extTo === '1' ? '끝난 뒤 복귀 시간 동안 호출하지 않습니다.' : ''); }
+    catch (err) { showError(err); xb.disabled = false; }
     return;
   }
   const b = e.target.closest('[data-op]');
@@ -173,8 +169,9 @@ $('#set-form').addEventListener('submit', async e => {
   $('#s-err').textContent = '';
   const values = {};
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'icalUrl']) values[k] = $('#s-' + k).value.trim();
-  for (const k of ['startLimitMin', 'remindMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'defaultMin', 'appointLeadMin']) values[k] = Number($('#s-' + k).value);
-  for (const k of ['appointEnabled', 'lunch', 'requirePush']) values[k] = $('#s-' + k).checked;
+  for (const k of ['callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) values[k] = Number($('#s-' + k).value);
+  for (const k of ['extKeywords', 'localKeywords', 'places']) values[k] = $('#s-' + k).value;
+  for (const k of ['lunch', 'requirePush']) values[k] = $('#s-' + k).checked;
   const code = $('#s-accessCode').value.trim();
   try {
     const r = await op('settings', { values, accessCode: code && code !== S.code ? code : undefined });
@@ -186,10 +183,12 @@ $('#proxy-form').addEventListener('submit', async e => {
   e.preventDefault();
   $('#p-err').textContent = '';
   try {
-    const r = await op('issue', { proxy: true, name: $('#p-name').value, dept: $('#p-dept').value, topic: $('#p-topic').value, appointAt: Number($('#p-appt').value) || null });
+    const r = await op('issue', { proxy: true, name: $('#p-name').value, dept: $('#p-dept').value, topic: $('#p-topic').value });
     toast('대리 접수했습니다', `${L.pad(r.no)}번`);
     e.target.reset();
   } catch (err) { $('#p-err').textContent = err.message; }
 });
+
+attachOrgPicker($('#p-dept'));
 
 boot().catch(e => { console.error(e); banner('관리 화면을 시작하지 못했습니다: ' + (e.message || e)); });

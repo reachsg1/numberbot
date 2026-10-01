@@ -44,31 +44,15 @@
     <div class="card">
       <form id="apply-form" novalidate>
         <h2>번호표 받기</h2>
-        <div class="grid2">
-          <div class="field"><label for="f-name">이름</label><input type="text" id="f-name" autocomplete="name" placeholder="홍길동" maxlength="20"></div>
-          <div class="field"><label for="f-dept">부서</label><input type="text" id="f-dept" placeholder="기획예산과" maxlength="30"></div>
+        <div class="field"><label for="f-name">이름</label><input type="text" id="f-name" autocomplete="name" placeholder="홍길동" maxlength="20"></div>
+        <div class="field"><label for="f-dept">부서</label><input type="text" id="f-dept" placeholder="두세 글자 입력 (예: 연구정, 농과원 토양)" maxlength="40">
+          <span class="hint">입력하면 아래에 부서가 나옵니다. <button type="button" class="linkbtn" id="f-dept-browse" aria-expanded="false">목록에서 고르기</button></span>
+          <div class="org-browse" id="f-dept-panel" hidden></div>
         </div>
         <div class="field"><label for="f-topic">보고 건명 <span class="hint">(선택)</span></label><input type="text" id="f-topic" placeholder="국정감사 예상질의 답변자료" maxlength="60"><span class="hint">비서실에만 보이고 현황판에는 나오지 않습니다.</span></div>
-        <div class="field"><span class="flabel">예상 소요 시간 <span class="hint">(선택 · 참고용)</span></span>
-          <div class="chips" role="radiogroup" aria-label="예상 소요 시간">
-            <label><input type="radio" name="f-ref" value="" checked><span>모름</span></label>
-            <label><input type="radio" name="f-ref" value="5"><span>5분</span></label>
-            <label><input type="radio" name="f-ref" value="10"><span>10분</span></label>
-            <label><input type="radio" name="f-ref" value="20"><span>20분</span></label>
-            <label><input type="radio" name="f-ref" value="30"><span>30분 이상</span></label>
-          </div>
+        <div class="field"><label for="f-ref">예상 소요 시간 <span class="hint">(선택 · 참고용)</span></label>
+          <div class="inline-unit"><input type="number" id="f-ref" inputmode="numeric" min="1" max="180" step="1" placeholder="예: 10"><span>분</span></div>
           <span class="hint">순서는 신청 순으로 정해지고, 소요 시간은 비서실 참고용입니다.</span>
-        </div>
-        <div class="field" id="mode-field"><span class="flabel">보고 방식</span>
-          <div class="seg" role="group" aria-label="보고 방식">
-            <button type="button" id="m-now" aria-pressed="true">지금 줄 서기</button>
-            <button type="button" id="m-appt" aria-pressed="false">시간 지정</button>
-          </div>
-          <div id="appt-box" hidden>
-            <label class="flabel" for="f-appt" style="margin-top:6px">보고 희망 시각</label>
-            <select id="f-appt"></select>
-            <span class="hint">그 시각이 되면 지금 보고 중인 분 바로 다음으로 호출됩니다. 10분 전에 알려 드립니다.</span>
-          </div>
         </div>
         <p class="err-msg" id="f-err" role="alert"></p>
         <button class="btn block" id="f-submit" type="submit">번호표 받기</button>

@@ -18,11 +18,11 @@ function seedDay(st, now) {
   if (st.day === day) return;
   const T = h => L.at(day, h);
   st.day = day;
-  st.dayDoc = { nextNo: 1, syncedAt: now, allDayCount: 1, busy: [{ s: T('10:30'), e: T('11:30') }, { s: T('14:00'), e: T('15:00') }, { s: T('16:30'), e: T('17:00') }] };
   st.dayPrivate = { syncedAt: now, allDay: ['(예시) 실국장 만찬'], busy: [
-    { s: T('10:30'), e: T('11:30'), title: '(예시) 국정감사 대비 간부회의' },
-    { s: T('14:00'), e: T('15:00'), title: '(예시) 사전질의답변서 검토' },
-    { s: T('16:30'), e: T('17:00'), title: '(예시) 기관장 보고' }] };
+    { s: T('10:30'), e: T('11:30'), title: '(예시) 국정감사 대비 간부회의', loc: '본청 5층' },
+    { s: T('14:00'), e: T('15:00'), title: '(예시) 농식품부 업무협의', loc: '정부세종청사' },
+    { s: T('16:30'), e: T('17:00'), title: '(예시) 기관장 보고', loc: '2회의실' }].map(b => { const x = L.extInfo(b, st.settings); return { ...b, key: 'demo@' + b.s, auto: x.ext, autoRet: x.ret ?? null, place: x.place || '', km: x.km || null, ext: x.ext, ret: x.ext ? x.ret : null }; }) };
+  st.dayDoc = { nextNo: 1, syncedAt: now, allDayCount: 1, busy: L.publicBusy(st.dayPrivate.busy) };
   st.tickets = []; st.priv = {}; st.logs = []; st.inbox = [];
   // 예시 대기자 두 명
   const mk = (uid, name, dept, topic, refMin, ago) => {
@@ -137,12 +137,20 @@ export function create() {
             const o = L.cleanSettings(d.values || {});
             const merged = L.withDefaults({ ...st.settings, ...o });
             if (merged.workStart >= merged.workEnd) throw new L.RuleError('invalid-argument', '보고 시작 시각이 종료 시각보다 빨라야 합니다.');
-            if (merged.remindMin >= merged.startLimitMin) throw new L.RuleError('invalid-argument', '재알림은 자동 취소보다 먼저여야 합니다.');
+            if (merged.remindEveryMin > merged.callLimitMin) throw new L.RuleError('invalid-argument', '재알림 간격은 자동 취소 시간보다 길 수 없습니다.');
             Object.assign(st.settings, o);
             if (d.accessCode != null) st.accessCode = String(d.accessCode).trim() || st.accessCode;
             break;
           }
           case 'getSecret': return { accessCode: st.accessCode };
+          case 'eventExt': {
+            const b = st.dayPrivate.busy.find(x => x.key === d.key);
+            if (!b) throw { code: 'not-found', message: '일정을 찾을 수 없습니다.' };
+            b.ext = d.ext == null ? b.auto : !!d.ext;
+            b.ret = b.ext && b.auto ? b.autoRet : null;
+            st.dayDoc.busy = L.publicBusy(st.dayPrivate.busy);
+            break;
+          }
           case 'syncCalendar': st.dayDoc.syncedAt = t0; st.dayPrivate.syncedAt = t0; break;
           case 'registerPush': case 'testPush': case 'confirmPush': case 'tick': case 'state': case 'adminState': break;
           case 'adminLogin': return { ok: true };

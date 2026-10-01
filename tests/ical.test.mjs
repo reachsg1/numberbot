@@ -20,6 +20,7 @@ const ICS = [
   // 격주 화요일 3회, 매월 첫째 월요일, 긴 제목 줄바꿈(folding)
   'BEGIN:VEVENT', 'DTSTART;TZID=Asia/Seoul:20261006T140000', 'DTEND;TZID=Asia/Seoul:20261006T150000', 'RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=3;BYDAY=TU', 'UID:b1', 'SUMMARY:격주 회의', 'END:VEVENT',
   'BEGIN:VEVENT', 'DTSTART;TZID=Asia/Seoul:20260907T100000', 'DTEND;TZID=Asia/Seoul:20260907T103000', 'RRULE:FREQ=MONTHLY;BYDAY=1MO', 'UID:m1', 'SUMMARY:월례 간부회의 및', ' 성과 점검', 'END:VEVENT',
+  'BEGIN:VEVENT', 'DTSTART;TZID=Asia/Seoul:20261007T100000', 'DTEND;TZID=Asia/Seoul:20261007T120000', 'UID:x1', 'SUMMARY:국정감사 출석', 'LOCATION:국회 본관\\, 서울', 'DESCRIPTION:<b>배석</b> 국장', 'END:VEVENT',
   'END:VCALENDAR',
 ].join('\r\n');
 
@@ -44,4 +45,10 @@ test('격주·횟수 제한, 매월 첫째 월요일, 줄바꿈된 제목', () =
   assert.equal(brief(eventsForDay(ICS, '2026-11-17')).length, 0, '횟수 끝');
   assert.deepEqual(brief(eventsForDay(ICS, '2026-10-05')), ['10:00-10:30 월례 간부회의 및성과 점검']);
   assert.equal(brief(eventsForDay(ICS, '2026-10-12')).length, 0, '둘째 월요일 아님');
+});
+
+test('장소·설명도 읽음(대외 일정 판단용)', () => {
+  const b = eventsForDay(ICS, '2026-10-07').busy.find(x => x.uid === 'x1');
+  assert.equal(b.loc, '국회 본관, 서울');
+  assert.match(b.desc, /배석/);
 });
