@@ -6,8 +6,8 @@
 <title>보고 대기 관리</title>
 <meta name="theme-color" content="#1E5C48">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/icons/icon-192.png">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" href="/icons/icon-192.png?v=2">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
@@ -40,6 +40,7 @@
         <div class="stats four" id="summary"></div>
         <div id="now"></div>
         <div class="card" id="queue"></div>
+        <div class="card" id="reported"></div>
         <div class="card" id="closed"></div>
       </div>
       <div class="acol">
@@ -84,6 +85,7 @@
             <p class="hint">캘린더 일정의 장소·제목·설명으로 판단합니다. 제목에 <b>[대외]</b> 또는 <b>[내부]</b>를 붙이면 그대로 따르고, "오늘 국장님 일정"에서 일정별로 바꿀 수도 있습니다.</p>
             <label class="check"><input type="checkbox" id="s-lunch"><span>점심시간(12:00~13:00)에는 호출하지 않음</span></label>
             <label class="check"><input type="checkbox" id="s-requirePush"><span>알림 테스트를 통과해야 번호표 발급</span></label>
+            <label class="check"><input type="checkbox" id="s-showEventTitles"><span>신청자 화면(대기 현황)에도 국장님 일정 <b>제목</b>을 보여 줌 — 끄면 "일정 있음"으로만 표시</span></label>
             <p class="err-msg" id="s-err" role="alert"></p>
             <button class="btn" type="submit">설정 저장</button>
           </form>

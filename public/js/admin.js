@@ -85,6 +85,18 @@ function render() {
       <div class="l2"><span>${L.hm(t.createdAt)} 접수</span>${t.refMin ? `<span>예상 ${t.refMin}분</span>` : ''}<span>${q.eta[t.id] ? L.hm(q.eta[t.id]) + '경 호출 예상' : '오늘 중 어려움'}</span></div>
       <div class="actions"><button class="btn ghost sm" data-op="move" data-dir="-1" data-id="${t.id}" ${i === 0 ? 'disabled' : ''} aria-label="한 칸 위로">▲</button><button class="btn ghost sm" data-op="move" data-dir="1" data-id="${t.id}" ${i === q.waiting.length - 1 ? 'disabled' : ''} aria-label="한 칸 아래로">▼</button>${i > 0 ? `<button class="btn ghost sm" data-op="urgent" data-id="${t.id}">긴급 · 맨 앞</button>` : ''}<button class="btn ghost sm" data-op="cancel" data-id="${t.id}" data-confirm="1">취소</button></div></div>`).join('') : '<p class="empty">대기 중인 분이 없습니다.</p>'}</div>`);
 
+  // 오늘 보고한 사람 (보고 완료 순)
+  const reported = done.slice().sort((a, b) => (a.startedAt || a.doneAt) - (b.startedAt || b.doneAt));
+  const mins = t => Math.max(0, Math.round((t.doneAt - (t.startedAt || t.doneAt)) / 60000));
+  const totalMin = reported.reduce((n, t) => n + mins(t), 0);
+  S.reportedText = ['순번\t번호\t이름\t부서\t보고 건명\t시작\t완료\t소요(분)\t예상(분)', ...reported.map((t, i) => [i + 1, L.pad(t.no), S.adm.priv[t.id]?.name || t.maskedName, t.dept, topic(t), t.startedAt ? L.hm(t.startedAt) : '', L.hm(t.doneAt), mins(t), t.refMin || ''].join('\t'))].join('\n');
+  setHTML($('#reported'), `<div class="row between"><h2>오늘 보고한 분</h2><span class="sub">${reported.length}명 · 총 ${totalMin}분${reported.length ? ` · 평균 ${Math.round(totalMin / reported.length)}분` : ''}</span></div>
+    ${reported.length ? `<div class="rtable"><table><thead><tr><th>#</th><th>번호</th><th>이름</th><th>부서</th><th>보고 건명</th><th>시간</th><th>소요</th></tr></thead><tbody>
+      ${reported.map((t, i) => `<tr><td class="num">${i + 1}</td><td class="num">${L.pad(t.no)}</td><td class="nw"><b>${name(t)}</b>${t.proxy ? '<span class="tag">대리</span>' : ''}</td><td class="nw">${esc(t.dept)}</td><td>${esc(topic(t)) || '<span class="sub">-</span>'}</td><td class="num">${t.startedAt ? L.hm(t.startedAt) : ''}~${L.hm(t.doneAt)}</td><td class="num">${mins(t)}분${t.refMin ? `<small>예상 ${t.refMin}분</small>` : ''}</td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="actions"><button class="btn ghost sm" type="button" id="copy-reported">표 복사 (엑셀·한글에 붙여넣기)</button></div>` : '<p class="empty">아직 보고를 마친 분이 없습니다.</p>'}
+    <p class="hint">실명·건명은 개인정보 보호를 위해 자정이 지나면 지워집니다. 남겨 두려면 그 전에 표를 복사해 두세요.</p>`);
+
   // 끝난 번호표
   const closed = P.tickets.filter(t => ['done', 'timeout', 'cancelled', 'expired'].includes(t.status)).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
   const openDetails = $('#closed details')?.open;
@@ -128,7 +140,7 @@ function fillSettings() {
   $('#s-icalUrl').value = s.icalUrl || '';
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) $('#s-' + k).value = s[k];
   for (const k of ['extKeywords', 'localKeywords', 'places']) $('#s-' + k).value = String(s[k] || '').split(',').map(x => x.trim()).join(', ');
-  for (const k of ['lunch', 'requirePush']) $('#s-' + k).checked = !!s[k];
+  for (const k of ['lunch', 'requirePush', 'showEventTitles']) $('#s-' + k).checked = s[k] !== false;
   S.settingsFilled = true;
 }
 
@@ -143,6 +155,11 @@ document.addEventListener('click', async e => {
       if (pr.dataset.presence === 'present' && r.presence?.mode === 'auto') toast('지금 걸린 일정이 없어 자동 상태로 둡니다');
       else toast('국장님 상태를 바꿨습니다', pr.dataset.presence === 'absent' ? '자동 호출을 멈췄습니다.' : pr.dataset.presence === 'present' ? '호출을 바로 재개합니다.' : '캘린더대로 호출합니다.');
     } catch (err) { showError(err); }
+    return;
+  }
+  if (e.target.closest('#copy-reported')) {
+    try { await navigator.clipboard.writeText(S.reportedText || ''); toast('표를 복사했습니다', '엑셀이나 한글에 붙여 넣으세요.'); }
+    catch { toast('복사하지 못했습니다', '브라우저가 복사를 막았습니다. 표를 직접 선택해 복사해 주세요.'); }
     return;
   }
   const xb = e.target.closest('[data-ext-key]');
@@ -171,7 +188,7 @@ $('#set-form').addEventListener('submit', async e => {
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'icalUrl']) values[k] = $('#s-' + k).value.trim();
   for (const k of ['callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) values[k] = Number($('#s-' + k).value);
   for (const k of ['extKeywords', 'localKeywords', 'places']) values[k] = $('#s-' + k).value;
-  for (const k of ['lunch', 'requirePush']) values[k] = $('#s-' + k).checked;
+  for (const k of ['lunch', 'requirePush', 'showEventTitles']) values[k] = $('#s-' + k).checked;
   const code = $('#s-accessCode').value.trim();
   try {
     const r = await op('settings', { values, accessCode: code && code !== S.code ? code : undefined });

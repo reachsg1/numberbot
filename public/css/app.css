@@ -128,11 +128,16 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 .tl .tb.lunch{background:var(--line)}
 .tl .tb.ext{background:color-mix(in srgb,var(--amber) 55%,var(--amber-soft))}
 .tl .tb.ret{background:color-mix(in srgb,var(--amber) 22%,var(--amber-soft))}
-.tl-tags{position:relative;height:14px;margin-top:-8px}
+.tl-tags{position:relative;height:14px}
 .tl-tags span{position:absolute;top:0;font-size:10.5px;line-height:14px;color:var(--amber);font-weight:600;white-space:nowrap}
 .evs .ret{font-size:11.5px;color:var(--amber);margin-left:6px}
 .linkbtn{border:0;background:none;color:var(--accent);font-size:12px;text-decoration:underline;padding:0 2px;margin-left:4px}
 .tl .nowm{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.tl .tg{position:absolute;top:0;bottom:0;width:1px;background:color-mix(in srgb,var(--ink) 18%,transparent)}
+.tl-ticks{position:relative;height:16px;font-size:11px;color:var(--muted)}
+.tl-ticks span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
+.tl-ticks span.first{transform:none}
+.tl-ticks span.last{transform:translateX(-100%)}
 .tl-key{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted)}
 .tl-key span{display:inline-flex;align-items:center;gap:5px}
 .tl-key i{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -208,3 +213,13 @@ details>summary{cursor:pointer;font-weight:600;font-size:14px}
 .modal-box h2{font-size:19px}
 .modal-box ol{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:4px}
 a.btn{text-decoration:none}
+
+/* 오늘 보고한 분 표 */
+.rtable{overflow-x:auto;margin-inline:-4px}
+.rtable table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:600px}
+.rtable td.nw{white-space:nowrap}
+.rtable td small{display:block;color:var(--muted);font-size:11.5px}
+.rtable th{text-align:left;font-size:12px;font-weight:600;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.rtable td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.rtable td.num{white-space:nowrap;font-variant-numeric:tabular-nums}
+.rtable tr:last-child td{border-bottom:0}

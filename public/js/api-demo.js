@@ -22,7 +22,7 @@ function seedDay(st, now) {
     { s: T('10:30'), e: T('11:30'), title: '(예시) 국정감사 대비 간부회의', loc: '본청 5층' },
     { s: T('14:00'), e: T('15:00'), title: '(예시) 농식품부 업무협의', loc: '정부세종청사' },
     { s: T('16:30'), e: T('17:00'), title: '(예시) 기관장 보고', loc: '2회의실' }].map(b => { const x = L.extInfo(b, st.settings); return { ...b, key: 'demo@' + b.s, auto: x.ext, autoRet: x.ret ?? null, place: x.place || '', km: x.km || null, ext: x.ext, ret: x.ext ? x.ret : null }; }) };
-  st.dayDoc = { nextNo: 1, syncedAt: now, allDayCount: 1, busy: L.publicBusy(st.dayPrivate.busy) };
+  st.dayDoc = { nextNo: 1, syncedAt: now, allDayCount: 1, busy: L.publicBusy(st.dayPrivate.busy, true) };
   st.tickets = []; st.priv = {}; st.logs = []; st.inbox = [];
   // 예시 대기자 두 명
   const mk = (uid, name, dept, topic, refMin, ago) => {
@@ -148,7 +148,7 @@ export function create() {
             if (!b) throw { code: 'not-found', message: '일정을 찾을 수 없습니다.' };
             b.ext = d.ext == null ? b.auto : !!d.ext;
             b.ret = b.ext && b.auto ? b.autoRet : null;
-            st.dayDoc.busy = L.publicBusy(st.dayPrivate.busy);
+            st.dayDoc.busy = L.publicBusy(st.dayPrivate.busy, true);
             break;
           }
           case 'syncCalendar': st.dayDoc.syncedAt = t0; st.dayPrivate.syncedAt = t0; break;

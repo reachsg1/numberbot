@@ -156,6 +156,7 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
   const d = day();
   assert.ok(d.cleanedAt); assert.equal(byNo(2).status, 'expired');
   assert.deepEqual(d.priv, {}); assert.deepEqual(d.logs, []); assert.deepEqual(d.busyTitled, []);
+  assert.ok(d.busy.length && d.busy.every(b => !b.title), '자정 지나면 일정 제목도 지움');
   assert.equal(byNo(1).maskedName, '김*수', '가린 이름만 남음');
 });
 
@@ -215,14 +216,18 @@ test('무료 한도: 한가할 때 상태 조회 1회 = Redis 명령 1개', asyn
   console.log(`  하루 종일 10초마다 조회해도 Redis 명령 약 ${perDay}개/일 (무료 50만/월)`);
 });
 
-test('대외 일정: 자동 판단, 관리자가 바꾸기, 공개 화면에는 제목 없이 대외 표시만', async () => {
+test('대외 일정: 자동 판단, 관리자가 바꾸기, 공개 화면 일정 제목은 설정에 따라', async () => {
   const { srv, op, admin, setNow } = setup();
   await admin();
   const r = await op('adm', { op: 'syncCalendar' });
   const ev = r.admin.dayPrivate.busy;
   assert.deepEqual(ev.map(b => b.title + ':' + b.ext), ['국정감사 대비 간부회의:false', '농식품부 협의:true']);
   assert.deepEqual(r.state.dayDoc.busy.map(b => !!b.ext), [false, true]);
-  assert.doesNotMatch(JSON.stringify(r.state), /농식품부|간부회의/);
+  assert.deepEqual(r.state.dayDoc.busy.map(b => b.title), ['국정감사 대비 간부회의', '농식품부 협의'], '기본: 신청자 화면에도 일정 제목');
+  assert.doesNotMatch(JSON.stringify(r.state), /정부세종청사/, '장소는 보내지 않음');
+  const hid = await op('adm', { op: 'settings', values: { showEventTitles: false } });
+  assert.doesNotMatch(JSON.stringify(hid.state), /농식품부|간부회의/, '끄면 제목 숨김');
+  await op('adm', { op: 'settings', values: { showEventTitles: true } });
   // 정부세종청사(120km) → 복귀 80분 → 15:00 종료 후 16:20부터 보고 가능
   assert.equal(r.state.dayDoc.busy[1].ret, 80);
   assert.equal(ev[1].place, '정부세종청사');

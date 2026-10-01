@@ -85,11 +85,19 @@ export function timelineHTML(s, dayDoc, now, titled, opts = {}) {
   const ret = b => (retAt(b) >= we ? '오늘 복귀 어려움' : `${L.hm(retAt(b))}경 복귀`);
   const dur = m => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ' ' + (m % 60) + '분' : ''}` : `${m}분`);
   const where = b => (titled && b.ext ? `<small class="ret">${b.place ? esc(b.place) + (b.km ? ` ${b.km}km` : '') + ' · ' : '거리 모름 · '}이동 ${dur(L.retMinOf(b, c.s))}</small>` : '');
-  const list = titled || (dayDoc.busy || []).map(b => ({ ...b, title: b.ext ? '대외 일정' : '일정 있음' }));
-  const row = b => `<div><span class="num">${L.hm(b.s)}~${L.hm(b.e)}</span><span>${esc(b.title)}${b.ext ? `${titled ? '<span class="tag amber">대외</span>' : ''}<small class="ret">${ret(b)}</small>${where(b)}` : ''}${opts.admin && b.key ? ` <button type="button" class="linkbtn" data-ext-key="${esc(b.key)}" data-ext-to="${b.ext ? 0 : 1}">${b.ext ? '내부 일정으로' : '대외 일정으로'}</button>` : ''}</span></div>`;
-  return `<div class="tl" aria-hidden="true">${bars}${nowm}</div>
+  const list = titled || (dayDoc.busy || []).map(b => ({ ...b, title: b.title || (b.ext ? '대외 일정' : '일정 있음') }));
+  const row = b => `<div><span class="num">${L.hm(b.s)}~${L.hm(b.e)}</span><span>${esc(b.title)}${b.ext ? `${titled || b.title ? '<span class="tag amber">대외</span>' : ''}<small class="ret">${ret(b)}</small>${where(b)}` : ''}${opts.admin && b.key ? ` <button type="button" class="linkbtn" data-ext-key="${esc(b.key)}" data-ext-to="${b.ext ? 0 : 1}">${b.ext ? '내부 일정으로' : '대외 일정으로'}</button>` : ''}</span></div>`;
+  // 약 2시간 간격 눈금: 시작 시각부터 2시간마다 + 끝 시각
+  const ticks = [];
+  const first = Math.ceil(ws / 3600000) * 3600000;
+  for (let t = first; t < we - 90 * L.MIN; t += 2 * 3600000) ticks.push(t);
+  ticks.push(we);
+  const hourTxt = t => (t === we && c.s.workEnd === '24:00' ? '24시' : `${Number(L.hm(t).slice(0, 2))}시${L.hm(t).slice(3) !== '00' ? L.hm(t).slice(3) + '분' : ''}`);
+  const gridLines = ticks.slice(1, -1).map(t => `<i class="tg" style="left:${pct(t)}%"></i>`).join('');
+  const labels = ticks.map((t, i) => `<span class="${i === 0 ? 'first' : i === ticks.length - 1 ? 'last' : ''}" style="left:${pct(t)}%">${hourTxt(t)}</span>`).join('');
+  return `<div class="tl" aria-hidden="true">${bars}${gridLines}${nowm}</div>
+    <div class="tl-ticks num" aria-hidden="true">${labels}</div>
     ${tags ? `<div class="tl-tags" aria-hidden="true">${tags}</div>` : ''}
-    <div class="tl-l num"><span>${L.hm(ws)}</span><span>${L.hm((ws + we) / 2)}</span><span>${esc(c.s.workEnd)}</span></div>
     <div class="tl-key"><span><i class="k-ok"></i>보고 가능</span><span><i class="k-busy"></i>일정</span>${c.bl.some(b => b.ext) ? '<span><i class="k-ext"></i>대외 일정</span><span><i class="k-ret"></i>복귀 이동</span>' : ''}${c.s.lunch ? '<span><i class="k-lunch"></i>점심</span>' : ''}</div>
     ${list.length ? `<div class="evs">${list.map(row).join('')}</div>` : '<p class="sub">오늘 국장님 캘린더에 시간이 정해진 일정이 없습니다.</p>'}`;
 }

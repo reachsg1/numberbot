@@ -40,6 +40,7 @@ export const DEFAULTS = {
   // 전주·완주(내부)로 보는 장소 낱말: 장소에 있으면 대외로 보지 않습니다. (지역 이름이 함께 있으면 지역이 우선)
   localKeywords: '전주,완주,혁신도시,농촌진흥청,농진청,본청,농과원,식량원,원예원,축산원,농업과학원,식량과학원,원예특작,축산과학원,인재개발센터,회의실,강당,오디토리움,국장실,청장실,차장실,집무실,층',
   requirePush: true,     // 알림 테스트를 통과해야 번호표 발급
+  showEventTitles: true, // 신청자 화면(대기 현황)에도 국장님 일정 제목 표시
   defaultMin: 10,        // 보고 기록이 없을 때 쓰는 1인 보고 시간
   avgMs: 0,              // 실제 보고 시간 평균(서버가 갱신)
   presence: { mode: 'auto', until: null, note: '' },
@@ -384,7 +385,7 @@ export function cleanSettings(input) {
   if (input.officeName != null) o.officeName = String(input.officeName).trim().slice(0, 20) || '국장실';
   for (const k of ['workStart', 'workEnd']) if (input[k] != null) { if (!validHM(input[k])) fail('invalid-argument', '시각은 07:00처럼 입력해 주세요(자정은 24:00).'); o[k] = input[k]; }
   if ((o.workStart || '00:00') >= (o.workEnd || '99:99')) fail('invalid-argument', '보고 시작 시각이 종료 시각보다 빨라야 합니다.');
-  for (const k of ['lunch', 'requirePush']) if (input[k] != null) o[k] = !!input[k];
+  for (const k of ['lunch', 'requirePush', 'showEventTitles']) if (input[k] != null) o[k] = !!input[k];
   if (input.calendarId != null) o.calendarId = String(input.calendarId).trim().slice(0, 200);
   if (input.icalUrl != null) {
     const u = String(input.icalUrl).trim();
@@ -446,4 +447,12 @@ export function extInfo(ev, sIn) {
 }
 export const isExternal = (ev, s) => extInfo(ev, s).ext;
 // 공개용 일정 목록(제목 없이 시각·대외 여부·복귀 시간만)
-export function publicBusy(list) { return (list || []).map(b => (b.ext ? { s: b.s, e: b.e, ext: true, ret: b.ret ?? null } : { s: b.s, e: b.e })); }
+// withTitle: 신청자 화면에도 일정 제목을 보여 줄지(관리 설정 showEventTitles)
+export function publicBusy(list, withTitle = false) {
+  return (list || []).map(b => {
+    const o = { s: b.s, e: b.e };
+    if (b.ext) { o.ext = true; o.ret = b.ret ?? null; }
+    if (withTitle && b.title) o.title = String(b.title).slice(0, 80);
+    return o;
+  });
+}
