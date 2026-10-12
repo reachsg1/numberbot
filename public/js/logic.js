@@ -202,7 +202,7 @@ export function noticeText(kind, t, sIn, extra = {}) {
     case 'expired': return { title: '오늘 보고가 마감되었습니다', body: '내일 다시 번호표를 받아 주세요.' };
     case 'uncall': return { title: '호출이 잠시 취소되었습니다', body: '앞 보고가 계속되고 있습니다. 순서는 그대로입니다.' };
     case 'test': return { title: '알림 테스트', body: '이 알림이 보이면 준비가 끝났습니다.' };
-    default: return { title: '줄안서', body: '' };
+    default: return { title: '줄비서', body: '' };
   }
 }
 
