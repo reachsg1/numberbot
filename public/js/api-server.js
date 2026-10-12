@@ -73,7 +73,8 @@ export function create(cfg = {}, first = null) {
     });
   }
   async function subscribe(force) {
-    const reg = await navigator.serviceWorker.register('/sw.js');
+    const reg = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
+    reg.update().catch(() => {});
     await navigator.serviceWorker.ready;
     if (!vapidPublic) vapidPublic = (await api.op('me')).vapidPublic;
     const key = b64ToBytes(vapidPublic);
@@ -151,14 +152,16 @@ export function create(cfg = {}, first = null) {
       try { sub = await subscribe(true); }
       catch (e) { throw { code: 'subscribe', message: '알림 등록에 실패했습니다: ' + (e.message || e) }; }
       await api.op('registerPush', { sub: sub.toJSON() });
-      const nonceP = new Promise((res, rej) => {
-        const to = setTimeout(() => { pendingNonce = null; rej({ code: 'timeout', message: '테스트 알림이 20초 안에 오지 않았습니다. 앱을 켜 둔 채로 다시 눌러 주세요.' }); }, 20000);
-        pendingNonce = n => { clearTimeout(to); pendingNonce = null; res(n); };
+      // 확인 방법 두 가지 중 먼저 되는 쪽: ① 화면이 알림 내용을 직접 받음 ② 서비스 워커가 서버에 알린 것을 확인(아이폰 대비)
+      let done = false, poll = null, to = null;
+      const result = new Promise((res, rej) => {
+        const finish = (ok, e) => { if (done) return; done = true; clearTimeout(to); clearInterval(poll); pendingNonce = null; ok ? res(true) : rej(e); };
+        to = setTimeout(() => finish(false, { code: 'timeout', message: '테스트 알림 확인이 40초 안에 되지 않았습니다. 알림이 왔다면 앱을 다시 열어 한 번 더 눌러 주세요.' }), 40000);
+        pendingNonce = n => api.op('confirmPush', { nonce: n }).then(() => finish(true)).catch(() => {});
+        poll = setInterval(() => api.op('me').then(m => { if (m.verified) finish(true); }).catch(() => {}), 2500);
       });
       await api.op('testPush');
-      const nonce = await nonceP;
-      await api.op('confirmPush', { nonce });
-      return true;
+      return result;
     },
     onMessage(fn) { msgL.push(fn); },
   };

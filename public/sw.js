@@ -1,5 +1,5 @@
 // 서비스 워커: 앱 설치(홈 화면) + 화면이 꺼져 있어도 푸시 알림 표시 (표준 웹 푸시, 외부 서비스 없음)
-const CACHE = 'bogo-v10';
+const CACHE = 'bogo-v11';
 const SHELL = ['/', '/index.html', '/css/app.css', '/js/app.js', '/js/ui.js', '/js/logic.js', '/js/config.js', '/js/api-server.js', '/js/orgs.js', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
@@ -16,6 +16,10 @@ self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { title: '줄안서', body: e.data ? e.data.text() : '' }; }
   e.waitUntil((async () => {
+    // 테스트 알림: 받았다는 사실을 서버에 바로 알림(화면이 꺼져 있거나 아이폰에서 화면 전달이 안 돼도 확인되도록)
+    if (d.kind === 'test' && d.nonce) {
+      try { await fetch('/api/op', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'pushAck', nonce: d.nonce }) }); } catch {}
+    }
     const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of list) c.postMessage({ type: 'bogo-push', data: d });
     await self.registration.showNotification(d.title || '줄안서', {

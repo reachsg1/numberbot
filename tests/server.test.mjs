@@ -72,11 +72,11 @@ function setup({ calStatus = 200 } = {}) {
   const day = () => JSON.parse(redis.store.get('bq:day:' + DAY)?.v || '{}');
   const byNo = n => day().tickets.find(t => t.no === n);
   const got = (from = 0) => inbox.slice(from).map(m => `${m.to}:${m.kind}`);
-  return { srv, redis, op, join, ready, admin, day, byNo, inbox, got, calls, tok, setNow: t => (now = t), gone: u => goneEndpoints.add('https://push.example/' + u) };
+  return { srv, redis, op, join, ready, admin, day, byNo, inbox, got, calls, tok, phones, setNow: t => (now = t), gone: u => goneEndpoints.add('https://push.example/' + u) };
 }
 
 test('접수 코드 → 알림 테스트(실제 암호화 푸시 복호화) → 번호표', async () => {
-  const { srv, op, join, ready, inbox } = setup();
+  const { srv, op, join, ready, inbox, phones } = setup();
   await assert.rejects(srv.handleOp(null, { op: 'me' }), { code: 'unauthenticated' });
   await assert.rejects(srv.handleOp('abc.def', { op: 'me' }), { code: 'unauthenticated' });
   await assert.rejects(srv.handleOp(null, { op: 'join', code: '0000' }), { code: 'permission-denied', message: /접수 코드/ });
@@ -88,6 +88,17 @@ test('접수 코드 → 알림 테스트(실제 암호화 푸시 복호화) → 
   await ready('a');
   assert.equal((await op('a', { op: 'me' })).verified, true);
   assert.equal(inbox.at(-1).title.length > 0, true);
+  // 아이폰 대비: 화면이 알림 내용을 못 받아도, 서비스 워커가 확인값만 서버로 보내면 확인됨(출입증 없이)
+  await join('i'); phones.i = phone('i');
+  await op('i', { op: 'registerPush', sub: phones.i.sub });
+  await op('i', { op: 'testPush' });
+  const tm = inbox.at(-1); assert.equal(tm.to, 'i');
+  assert.deepEqual(await srv.handleOp(null, { op: 'pushAck', nonce: 'wrongnonce12' }), { ok: false });
+  assert.equal((await op('i', { op: 'me' })).verified, false);
+  assert.deepEqual(await srv.handleOp(null, { op: 'pushAck', nonce: tm.nonce }), { ok: true });
+  assert.equal((await op('i', { op: 'me' })).verified, true);
+  assert.equal((await op('i', { op: 'confirmPush', nonce: tm.nonce })).verified, true, '화면 쪽 확인이 늦게 와도 성공');
+  assert.deepEqual(await srv.handleOp(null, { op: 'pushAck', nonce: tm.nonce }), { ok: false }, '한 번만 사용');
   const r = await op('a', { op: 'issue', name: '김민수', dept: '기획조정과', topic: '국감 자료' });
   assert.equal(r.no, 1);
   // 공개 상태에는 실명·건명·기기ID가 없음
