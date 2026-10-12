@@ -94,7 +94,7 @@ function render() {
   const mt = myTicket();
   const badge = $('#nav-badge');
   if (mt && L.OPEN.includes(mt.status)) { badge.hidden = false; badge.textContent = L.pad(mt.no); } else badge.hidden = true;
-  document.title = mt && mt.status === 'called' ? '● 입실하세요 — 줄비서' : '줄비서 · 국장실 보고 대기';
+  document.title = mt && mt.status === 'called' ? '● 입실하세요 — 줄안서' : '줄안서 · 국장실 보고 대기';
   const q = L.computeQueue(P.tickets, s, P.dayDoc, t0);
   // 1초마다 다시 그리되, 입력 중인 폼은 건드리지 않습니다.
   renderApplySummary(q, av, at, s);
@@ -117,7 +117,7 @@ function renderPushCard(s) {
     ${showInstall ? `<p class="sub">홈 화면에 앱을 설치하면 알림을 더 안정적으로 받을 수 있습니다. 설치가 끝나면 알림 설정 화면으로 바로 안내합니다.</p>
       <button class="btn block" id="install-btn">홈 화면에 앱 설치</button>` : ''}
     ${!needPush ? '' : iosNeedsInstall ? `<p class="sub">아이폰은 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있습니다.</p>
-      <ol class="sub" style="margin:0;padding-left:18px"><li>Safari 아래쪽 <b>공유 버튼(□↑)</b> 또는 주소창 옆 <b>⋯ → 공유</b>를 누릅니다.</li><li><b>홈 화면에 추가</b>를 누릅니다.</li><li>홈 화면에 생긴 <b>줄비서</b> 아이콘으로 다시 열어 알림을 켭니다.</li></ol>` :
+      <ol class="sub" style="margin:0;padding-left:18px"><li>Safari 아래쪽 <b>공유 버튼(□↑)</b> 또는 주소창 옆 <b>⋯ → 공유</b>를 누릅니다.</li><li><b>홈 화면에 추가</b>를 누릅니다.</li><li>홈 화면에 생긴 <b>줄안서</b> 아이콘으로 다시 열어 알림을 켭니다.</li></ol>` :
       `<p class="sub">차례가 되면 휴대폰 알림으로 부릅니다. 알림을 켜면 테스트 알림을 한 번 보내 확인합니다. 확인이 끝나야 번호표를 받을 수 있습니다.</p>`}
     ${needPush && api.pushState() === 'denied' ? deniedHelp() : ''}
     ${needPush ? `<button class="btn ${showInstall ? 'ghost' : ''} block" id="push-btn" ${iosNeedsInstall ? 'disabled' : ''}>${showInstall ? '설치 없이 알림만 켜기' : '알림 켜고 테스트하기'}</button>` : ''}
@@ -136,7 +136,7 @@ addEventListener('appinstalled', () => {
   if (S.pub) render();
   // 설치가 끝나면 곧바로 알림 설정 화면으로 안내 (앱과 브라우저는 알림 권한을 함께 씁니다)
   if (!S.me.verified) openPushModal(true);
-  else toast('앱을 설치했습니다', '홈 화면의 "줄비서" 아이콘으로 열어 쓰세요.');
+  else toast('앱을 설치했습니다', '홈 화면의 "줄안서" 아이콘으로 열어 쓰세요.');
 });
 async function installApp() {
   if (!installEvt) return;
@@ -145,9 +145,9 @@ async function installApp() {
   if (r && r.outcome !== 'accepted') toast('설치를 취소했습니다', '나중에 브라우저 메뉴 ⋮ → "앱 설치"로도 설치할 수 있습니다.');
 }
 function deniedHelp() {
-  if (isIOS) return `<div class="banner err"><b>알림이 꺼져 있습니다.</b></div><ol><li>아이폰 <b>설정</b> 앱 → <b>알림</b>을 엽니다.</li><li>목록에서 <b>줄비서</b>를 누르고 <b>알림 허용</b>을 켭니다.</li><li>이 앱으로 돌아와 아래 버튼을 누릅니다.</li></ol>`;
+  if (isIOS) return `<div class="banner err"><b>알림이 꺼져 있습니다.</b></div><ol><li>아이폰 <b>설정</b> 앱 → <b>알림</b>을 엽니다.</li><li>목록에서 <b>줄안서</b>를 누르고 <b>알림 허용</b>을 켭니다.</li><li>이 앱으로 돌아와 아래 버튼을 누릅니다.</li></ol>`;
   return `<div class="banner err"><b>알림이 차단되어 있습니다.</b> 아래 순서로 허용한 뒤 돌아와 주세요.</div>
-    <ol><li>홈 화면의 <b>줄비서</b> 아이콘을 <b>길게</b> 누릅니다.</li><li><b>앱 정보(ⓘ)</b> → <b>알림</b>을 누릅니다.</li><li><b>알림 허용</b>(모든 알림)을 켭니다.</li></ol>
+    <ol><li>홈 화면의 <b>줄안서</b> 아이콘을 <b>길게</b> 누릅니다.</li><li><b>앱 정보(ⓘ)</b> → <b>알림</b>을 누릅니다.</li><li><b>알림 허용</b>(모든 알림)을 켭니다.</li></ol>
     <p class="hint">크롬 화면에서 쓰는 경우: 주소창 왼쪽 <b>설정 아이콘(⊶)</b> → <b>권한</b> → <b>알림</b> → 허용</p>`;
 }
 async function enablePushFlow(btn) {
@@ -173,7 +173,7 @@ function openPushModal(justInstalled) {
     <p class="sub">차례가 되면 휴대폰 알림으로 부릅니다. 아래 버튼을 누르고, 알림 허용 창이 뜨면 <b>허용</b>을 눌러 주세요. 확인용 테스트 알림이 한 번 옵니다.</p>
     ${denied ? deniedHelp() : ''}
     <button class="btn block" id="pm-go">${denied ? '설정을 바꿨어요, 다시 확인' : '알림 켜고 테스트하기'}</button>
-    ${justInstalled ? '<p class="hint">다음부터는 홈 화면의 <b>줄비서</b> 아이콘으로 여세요.</p>' : ''}
+    ${justInstalled ? '<p class="hint">다음부터는 홈 화면의 <b>줄안서</b> 아이콘으로 여세요.</p>' : ''}
     <button class="btn ghost block" data-close>나중에</button>`, { onClose: () => { pushModal = null; } });
   $('#pm-go').addEventListener('click', async ev => { if (await enablePushFlow(ev.currentTarget)) pushModal && pushModal.close(); });
 }
@@ -271,7 +271,7 @@ function renderMine(t, q, av, at, s, t0) {
       : `<div class="actions" style="justify-content:center"><button class="btn ghost sm" data-act="askCancel">번호표 취소</button></div>`) : '';
   const html = `${top}
     <div class="slip">
-      <div class="slip-top"><span class="kicker">줄비서 번호표</span><span class="big">${L.pad(t.no)}</span><span class="sub">${esc(t.maskedName)} · ${esc(t.dept)} · ${L.hm(t.createdAt)} 발급${t.refMin ? ` · 예상 ${t.refMin}분` : ''}</span></div>
+      <div class="slip-top"><span class="kicker">줄안서 번호표</span><span class="big">${L.pad(t.no)}</span><span class="sub">${esc(t.maskedName)} · ${esc(t.dept)} · ${L.hm(t.createdAt)} 발급${t.refMin ? ` · 예상 ${t.refMin}분` : ''}</span></div>
       <div class="perf"></div>
       <div class="slip-bot"><span class="state ${cls}">${esc(label)}</span>${body}</div>
     </div>${cancelBox}`;
