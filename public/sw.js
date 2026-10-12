@@ -1,5 +1,5 @@
 // 서비스 워커: 앱 설치(홈 화면) + 화면이 꺼져 있어도 푸시 알림 표시 (표준 웹 푸시, 외부 서비스 없음)
-const CACHE = 'bogo-v6';
+const CACHE = 'bogo-v10';
 const SHELL = ['/', '/index.html', '/css/app.css', '/js/app.js', '/js/ui.js', '/js/logic.js', '/js/config.js', '/js/api-server.js', '/js/orgs.js', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
@@ -14,11 +14,11 @@ self.addEventListener('fetch', e => {
 // 푸시 받기 → 알림 표시 + 열려 있는 앱 화면에도 전달
 self.addEventListener('push', e => {
   let d = {};
-  try { d = e.data ? e.data.json() : {}; } catch { d = { title: '보고 대기', body: e.data ? e.data.text() : '' }; }
+  try { d = e.data ? e.data.json() : {}; } catch { d = { title: '줄안서', body: e.data ? e.data.text() : '' }; }
   e.waitUntil((async () => {
     const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of list) c.postMessage({ type: 'bogo-push', data: d });
-    await self.registration.showNotification(d.title || '보고 대기', {
+    await self.registration.showNotification(d.title || '줄안서', {
       body: d.body || '',
       icon: '/icons/icon-192.png', badge: '/icons/badge-72.png',
       tag: d.kind === 'test' ? 'bogo-test' : 'bogo', renotify: true,

@@ -34,7 +34,7 @@ function phone(name) {
 
 const ICS = [
   'BEGIN:VCALENDAR', 'VERSION:2.0',
-  'BEGIN:VEVENT', 'DTSTART;TZID=Asia/Seoul:20260930T103000', 'DTEND;TZID=Asia/Seoul:20260930T113000', 'UID:e1', 'SUMMARY:국정감사 대비 간부회의', 'END:VEVENT',
+  'BEGIN:VEVENT', 'DTSTART;TZID=Asia/Seoul:20260930T103000', 'DTEND;TZID=Asia/Seoul:20260930T113000', 'UID:e1', 'SUMMARY:국정감사 대비 간부회의', 'DESCRIPTION:장소: 제2회의실', 'END:VEVENT',
   'BEGIN:VEVENT', 'DTSTART;TZID=Asia/Seoul:20260930T140000', 'DTEND;TZID=Asia/Seoul:20260930T150000', 'UID:e3', 'SUMMARY:농식품부 협의', 'LOCATION:정부세종청사', 'END:VEVENT',
   'BEGIN:VEVENT', 'DTSTART;VALUE=DATE:20260930', 'DTEND;VALUE=DATE:20261001', 'UID:e2', 'SUMMARY:실국장 만찬', 'END:VEVENT',
   'END:VCALENDAR',
@@ -99,7 +99,7 @@ test('접수 코드 → 알림 테스트(실제 암호화 푸시 복호화) → 
 });
 
 test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞 알림 → 3분 초과 취소 → 캘린더 → 밤 정리', async () => {
-  const { srv, op, ready, admin, byNo, day, got, setNow, calls, inbox } = setup();
+  const { srv, redis, op, ready, admin, byNo, day, got, setNow, calls, inbox } = setup();
   for (const u of ['a', 'b', 'c']) await ready(u);
   await admin();
   await srv.publicState(); // 앱이 현황을 볼 때 캘린더도 읽힘
@@ -113,6 +113,7 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
   // 캘린더는 상태 확인 때 읽힘
   assert.ok(calls.some(u => u.includes('calendar.google.com/calendar/ical/rdarndpolicy%40gmail.com/public/basic.ics')));
   assert.deepEqual(day().busy.map(b => L.hm(b.s) + '-' + L.hm(b.e) + (b.ext ? ' 대외' : '')), ['10:30-11:30', '14:00-15:00 대외']);
+  assert.deepEqual(day().busy.map(b => !!b.pre), [true, false], '설명에 2회의실 → 회의 준비');
   assert.equal(day().allDayCount, 1);
 
   // 남의 번호표는 못 누름
@@ -158,6 +159,15 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
   assert.deepEqual(d.priv, {}); assert.deepEqual(d.logs, []); assert.deepEqual(d.busyTitled, []);
   assert.ok(d.busy.length && d.busy.every(b => !b.title), '자정 지나면 일정 제목도 지움');
   assert.equal(byNo(1).maskedName, '김*수', '가린 이름만 남음');
+  // 보고 이력은 자정이 지나도 관리자에게 남음(실명·건명 포함), 신청자는 볼 수 없음
+  const h = await op('adm', { op: 'history', day: DAY });
+  assert.deepEqual(h.days, [DAY]);
+  assert.ok(h.rows.length >= 2 && h.rows.every(r => r.name && !r.name.includes('*')), '실명으로 보관');
+  assert.equal(h.rows.at(-1).s, T('10:20')); assert.equal(h.rows.at(-1).min, 11);
+  await assert.rejects(op('c', { op: 'history' }), /관리자만/);
+  const all = await op('adm', { op: 'history', all: true });
+  assert.equal(all.rows.length, h.rows.length); assert.equal(all.rows[0].day, DAY);
+  assert.ok(!redis.store.get('bq:hist:' + DAY).exp, '이력은 만료 없음');
 });
 
 test('관리자: 비밀번호 로그인 · 부재 · 설정(접수 코드·iCal 주소) · 대리 접수', async () => {

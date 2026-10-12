@@ -216,3 +216,52 @@ test('대외 일정 복귀 시간: 거리 ÷ 90km/시, 10분 단위 올림 · �
   assert.match(L.whyText(L.availability(S2, { busy: [{ s: T('09:00'), e: T('10:00'), ext: true, ret: 1440 }] }, T('11:00'))), /오늘 복귀 어려움/);
   assert.throws(() => L.cleanSettings({ places: '서울=이백' }), /형식/);
 });
+
+test('회의 준비: 2회의실 일정은 30분 전부터 호출하지 않음', () => {
+  const p = (ev, s = {}) => L.needsPrep(ev, s);
+  assert.equal(p({ title: '간부회의', loc: '2회의실' }), true, '장소');
+  assert.equal(p({ title: '제2회의실 회의' }), true, '제목');
+  assert.equal(p({ title: '업무협의', desc: '장소: 2 회의실' }), true, '설명·띄어쓰기');
+  assert.equal(p({ title: '회의', loc: '12회의실' }), false, '12회의실은 아님');
+  assert.equal(p({ title: '회의', loc: '1회의실' }), false);
+  assert.equal(p({ title: '회의', loc: '2회의실' }, { prepMin: 0 }), false, '0분이면 끔');
+  const day = '2026-10-12', now = L.at(day, '13:00');
+  const dayDoc = { busy: [{ s: L.at(day, '14:00'), e: L.at(day, '15:00'), pre: true }] };
+  const s = { lunch: false, avgMs: 10 * 60000 };
+  assert.equal(L.availability(s, dayDoc, L.at(day, '13:20')).ok, true, '13:20 보고 가능(10분 보고면 13:30 전 끝)');
+  const a = L.availability(s, dayDoc, L.at(day, '13:35'));
+  assert.equal(a.ok, false); assert.equal(L.whyText(a), '회의 준비 · 14:00 회의');
+  assert.equal(L.hm(a.until), '15:' + String(L.withDefaults(s).resumeBufferMin).padStart(2, '0'));
+  const b = L.availability(s, { busy: [{ s: L.at(day, '14:00'), e: L.at(day, '15:00') }] }, L.at(day, '13:35'));
+  assert.equal(b.ok, true, '일반 일정은 바로 전까지 가능');
+  assert.equal(L.publicBusy([{ s: 1, e: 2, pre: true }])[0].pre, true);
+  assert.equal(L.cleanSettings({ prepMin: 20, prepKeywords: '2회의실, 대회의실' }).prepKeywords, '2회의실,대회의실');
+  assert.throws(() => L.cleanSettings({ prepMin: 500 }), /범위/);
+});
+
+test('엔진: 다음 분 알림 — 시작 즉시 · 종료 전(20분↑ 10분 전, 15분↑ 5분 전) · 완료 시 입실', () => {
+  const run = (refMin, times) => {
+    let ts = [tk({ id: 'A', status: 'in_progress', calledAt: T('13:00'), startedAt: T('13:00'), refMin }), tk({ id: 'B' })];
+    const got = [];
+    for (const h of times) { const r = L.tick(ts, S, {}, T(h)); ts = apply(ts, r); for (const n of r.notices) if (n.id === 'B') got.push(h + ' ' + n.kind + (n.extra.lead ? n.extra.lead : '')); }
+    return { got, ts };
+  };
+  // 30분 보고: 13:00 문 앞 대기, 13:20 한 번 더(10분 전)
+  assert.deepEqual(run(30, ['13:00', '13:10', '13:19', '13:20', '13:21', '13:25']).got, ['13:00 next', '13:20 next210']);
+  // 15분 보고: 5분 전(13:10)
+  assert.deepEqual(run(15, ['13:00', '13:09', '13:10', '13:12']).got, ['13:00 next', '13:10 next25']);
+  // 10분 보고: 시작 때 한 번만
+  assert.deepEqual(run(10, ['13:00', '13:05', '13:09']).got, ['13:00 next']);
+  // 완료 → 바로 입실 요청("앞 분 보고가 끝났습니다")
+  let { ts } = run(30, ['13:00', '13:20']);
+  ts[0] = { ...ts[0], status: 'done', doneAt: T('13:28') };
+  const r = L.tick(ts, S, {}, T('13:28'));
+  const n = r.notices.find(x => x.id === 'B');
+  assert.equal(n.kind, 'call'); assert.match(L.noticeText('call', { no: 2 }, S, n.extra).body, /앞 분 보고가 끝났습니다/);
+  // 완료했지만 회의 중이라 바로 못 부르면 '보류' 안내 한 번
+  let t2 = [tk({ id: 'A', status: 'done', doneAt: T('10:29') }), tk({ id: 'B', flags: { next: true } })];
+  let r2 = L.tick(t2, S, dayDoc, T('10:29')); t2 = apply(t2, r2);
+  assert.deepEqual(r2.notices.map(x => x.kind), ['paused']);
+  assert.match(L.noticeText('paused', { no: 2 }, S, r2.notices[0].extra).body, /11:35경 호출 예정/);
+  assert.equal(L.tick(t2, S, dayDoc, T('10:31')).notices.length, 0, '한 번만');
+});

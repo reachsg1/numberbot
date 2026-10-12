@@ -60,7 +60,7 @@ export function toast(title, body = '', kind = '') {
 export function showError(e) { toast('처리하지 못했습니다', e?.message || String(e), 'err'); }
 
 export function availText(av) {
-  if (av.ok) return { ok: true, text: '지금 보고 가능', sub: av.next ? `${L.hm(av.next.s)}부터 ${av.next.kind === 'lunch' ? '점심시간' : av.next.ext ? `대외 일정(${L.hm(av.next.e)}경 복귀)` : '국장님 일정'}` : '' };
+  if (av.ok) return { ok: true, text: '지금 보고 가능', sub: av.next ? `${L.hm(av.next.s)}부터 ${av.next.kind === 'lunch' ? '점심시간' : av.next.pre ? `회의 준비(${L.hm(av.next.raw.s)} 회의)` : av.next.ext ? `대외 일정(${L.hm(av.next.e)}경 복귀)` : '국장님 일정'}` : '' };
   return { ok: false, text: L.whyText(av), sub: av.until ? `${L.hm(av.until)}부터 호출 재개` : (av.why === 'closed' ? '' : '오늘 호출 어려움') };
 }
 
@@ -75,6 +75,7 @@ export function timelineHTML(s, dayDoc, now, titled, opts = {}) {
   for (const b of c.bl) {
     if (b.kind === 'absent') continue;
     const bs = b.raw ? b.raw.s : b.s, be = b.raw ? b.raw.e : b.e;
+    if (b.pre && b.s < bs) bars += bar(b.s, bs, 'prep');
     if (b.ext) {
       bars += bar(bs, be, 'busy ext') + bar(be, b.e, 'ret');
       tags += `<span style="left:${pct(bs)}%">대외 일정</span>`;
@@ -86,7 +87,7 @@ export function timelineHTML(s, dayDoc, now, titled, opts = {}) {
   const dur = m => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ' ' + (m % 60) + '분' : ''}` : `${m}분`);
   const where = b => (titled && b.ext ? `<small class="ret">${b.place ? esc(b.place) + (b.km ? ` ${b.km}km` : '') + ' · ' : '거리 모름 · '}이동 ${dur(L.retMinOf(b, c.s))}</small>` : '');
   const list = titled || (dayDoc.busy || []).map(b => ({ ...b, title: b.title || (b.ext ? '대외 일정' : '일정 있음') }));
-  const row = b => `<div><span class="num">${L.hm(b.s)}~${L.hm(b.e)}</span><span>${esc(b.title)}${b.ext ? `${titled || b.title ? '<span class="tag amber">대외</span>' : ''}<small class="ret">${ret(b)}</small>${where(b)}` : ''}${opts.admin && b.key ? ` <button type="button" class="linkbtn" data-ext-key="${esc(b.key)}" data-ext-to="${b.ext ? 0 : 1}">${b.ext ? '내부 일정으로' : '대외 일정으로'}</button>` : ''}</span></div>`;
+  const row = b => `<div><span class="num">${L.hm(b.s)}~${L.hm(b.e)}</span><span>${esc(b.title)}${b.pre && c.s.prepMin > 0 ? `<small class="ret prep">${L.hm(b.s - c.s.prepMin * L.MIN)}부터 회의 준비</small>` : ''}${b.ext ? `${titled || b.title ? '<span class="tag amber">대외</span>' : ''}<small class="ret">${ret(b)}</small>${where(b)}` : ''}${opts.admin && b.key ? ` <button type="button" class="linkbtn" data-ext-key="${esc(b.key)}" data-ext-to="${b.ext ? 0 : 1}">${b.ext ? '내부 일정으로' : '대외 일정으로'}</button>` : ''}</span></div>`;
   // 약 2시간 간격 눈금: 시작 시각부터 2시간마다 + 끝 시각
   const ticks = [];
   const first = Math.ceil(ws / 3600000) * 3600000;
@@ -98,7 +99,7 @@ export function timelineHTML(s, dayDoc, now, titled, opts = {}) {
   return `<div class="tl" aria-hidden="true">${bars}${gridLines}${nowm}</div>
     <div class="tl-ticks num" aria-hidden="true">${labels}</div>
     ${tags ? `<div class="tl-tags" aria-hidden="true">${tags}</div>` : ''}
-    <div class="tl-key"><span><i class="k-ok"></i>보고 가능</span><span><i class="k-busy"></i>일정</span>${c.bl.some(b => b.ext) ? '<span><i class="k-ext"></i>대외 일정</span><span><i class="k-ret"></i>복귀 이동</span>' : ''}${c.s.lunch ? '<span><i class="k-lunch"></i>점심</span>' : ''}</div>
+    <div class="tl-key"><span><i class="k-ok"></i>보고 가능</span><span><i class="k-busy"></i>일정</span>${c.bl.some(b => b.ext) ? '<span><i class="k-ext"></i>대외 일정</span><span><i class="k-ret"></i>복귀 이동</span>' : ''}${c.bl.some(b => b.pre) ? '<span><i class="k-prep"></i>회의 준비</span>' : ''}${c.s.lunch ? '<span><i class="k-lunch"></i>점심</span>' : ''}</div>
     ${list.length ? `<div class="evs">${list.map(row).join('')}</div>` : '<p class="sub">오늘 국장님 캘린더에 시간이 정해진 일정이 없습니다.</p>'}`;
 }
 

@@ -3,7 +3,7 @@ import * as L from './logic.js';
 import { $, esc, loadApi, toast, showError, availText, timelineHTML, demoBar, statusLabel, mmss, minsAgo, attachOrgPicker } from './ui.js';
 
 const api = await loadApi();
-const S = { pub: null, adm: { priv: {}, dayPrivate: {}, logs: [] }, code: '', settingsFilled: false, noteDraft: null };
+const S = { hist: { days: [], day: '', rows: [] }, pub: null, adm: { priv: {}, dayPrivate: {}, logs: [] }, code: '', settingsFilled: false, noteDraft: null };
 demoBar(api, () => render());
 
 const op = (name, data = {}) => api.op(name, api.mode === 'demo' ? { ...data, __admin: true } : data);
@@ -18,7 +18,9 @@ async function boot() {
   // 관리 화면이 켜져 있는 동안 15초마다 실명·기록을 받아 오며, 이때 서버가 호출·알림 판단도 함께 합니다.
   api.watchAdmin(a => { banner(''); S.adm = a; render(); fillSettings(); }, e => banner(e.message));
   loadSecret();
+  loadHistory();
   setInterval(render, 1000);
+  setInterval(() => { if (S.hist.day === L.dayKey(Date.now())) loadHistory(S.hist.day); }, 30000);
 }
 function showLogin(msg) { $('#login').hidden = false; $('#main').hidden = true; $('#login-err').textContent = msg || ''; $('#h-state').hidden = true; $('#logout').hidden = true; }
 $('#login-form').addEventListener('submit', async e => {
@@ -32,6 +34,47 @@ $('#login-form').addEventListener('submit', async e => {
 $('#logout').addEventListener('click', async () => { await api.signOut(); location.reload(); });
 function banner(m) { $('#banner').innerHTML = m ? `<div class="banner err">${esc(m)}</div>` : ''; }
 async function loadSecret() { try { S.code = (await op('getSecret')).accessCode; $('#s-accessCode').value = S.code; render(); } catch {} }
+
+// ---------- 보고 이력 (관리자 전용 · 날짜별 보관) ----------
+async function loadHistory(day) {
+  try { const r = await op('history', day ? { day } : {}); S.hist = { days: r.days || [], day: r.day, rows: r.rows || [] }; renderHistory(); }
+  catch (e) { setHTML($('#history'), `<h2>보고 이력</h2><p class="sub">불러오지 못했습니다: ${esc(e.message || '')}</p>`); }
+}
+function renderHistory() {
+  const h = S.hist, today = L.dayKey(Date.now());
+  const days = h.days.includes(today) ? h.days : [today, ...h.days];
+  const wd = d => '일월화수목금토'[new Date(d + 'T12:00:00+09:00').getUTCDay()];
+  const total = h.rows.reduce((n, r) => n + r.min, 0);
+  setHTML($('#history'), `<div class="row between"><h2>보고 이력</h2><span class="sub">관리자만 볼 수 있습니다 · 지워지지 않고 보관</span></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
+      <select id="hist-day" aria-label="날짜">${days.map(d => `<option value="${d}" ${d === h.day ? 'selected' : ''}>${d.slice(5).replace('-', '. ')}. (${wd(d)})${d === today ? ' · 오늘' : ''}</option>`).join('')}</select>
+      <span class="sub">${h.rows.length}명${h.rows.length ? ` · 총 ${total}분 · 평균 ${Math.round(total / h.rows.length)}분` : ''}</span>
+    </div>
+    ${h.rows.length ? `<div class="rtable"><table><thead><tr><th>#</th><th>번호</th><th>이름</th><th>부서</th><th>보고 건명</th><th>시간</th><th>소요</th></tr></thead><tbody>
+      ${h.rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td class="num">${L.pad(r.no)}</td><td class="nw"><b>${esc(r.name)}</b>${r.proxy ? '<span class="tag">대리</span>' : ''}${r.urgent ? '<span class="tag amber">긴급</span>' : ''}</td><td class="nw">${esc(r.dept)}</td><td>${esc(r.topic) || '<span class="sub">-</span>'}</td><td class="num">${L.hm(r.s)}~${L.hm(r.e)}</td><td class="num">${r.min}분${r.refMin ? `<small>예상 ${r.refMin}분</small>` : ''}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="empty">이 날 보고 기록이 없습니다.</p>'}
+    <div class="actions"><button class="btn ghost sm" type="button" id="hist-copy" ${h.rows.length ? '' : 'disabled'}>이 날 표 복사</button><button class="btn ghost sm" type="button" id="hist-csv">전체 기간 내려받기 (엑셀 CSV)</button></div>`);
+}
+document.addEventListener('change', e => { if (e.target.id === 'hist-day') loadHistory(e.target.value); });
+async function histClick(e) {
+  if (e.target.closest('#hist-copy')) {
+    try { await navigator.clipboard.writeText(L.historyText(S.hist.rows)); toast('표를 복사했습니다', '엑셀이나 한글에 붙여 넣으세요.'); }
+    catch { toast('복사하지 못했습니다', '표를 직접 선택해 복사해 주세요.'); }
+    return true;
+  }
+  if (e.target.closest('#hist-csv')) {
+    try {
+      const r = await op('history', { all: true });
+      const csv = '\ufeff' + L.historyText(r.rows, true).split('\n').map(line => line.split('\t').map(x => /[",]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x).join(',')).join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = `보고이력_${L.dayKey(Date.now())}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast('내려받았습니다', `${r.rows.length}건`);
+    } catch (err) { showError(err); }
+    return true;
+  }
+  return false;
+}
 
 function setHTML(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
 const name = t => esc(S.adm.priv[t.id]?.name || t.maskedName);
@@ -95,7 +138,7 @@ function render() {
       ${reported.map((t, i) => `<tr><td class="num">${i + 1}</td><td class="num">${L.pad(t.no)}</td><td class="nw"><b>${name(t)}</b>${t.proxy ? '<span class="tag">대리</span>' : ''}</td><td class="nw">${esc(t.dept)}</td><td>${esc(topic(t)) || '<span class="sub">-</span>'}</td><td class="num">${t.startedAt ? L.hm(t.startedAt) : ''}~${L.hm(t.doneAt)}</td><td class="num">${mins(t)}분${t.refMin ? `<small>예상 ${t.refMin}분</small>` : ''}</td></tr>`).join('')}
       </tbody></table></div>
       <div class="actions"><button class="btn ghost sm" type="button" id="copy-reported">표 복사 (엑셀·한글에 붙여넣기)</button></div>` : '<p class="empty">아직 보고를 마친 분이 없습니다.</p>'}
-    <p class="hint">실명·건명은 개인정보 보호를 위해 자정이 지나면 지워집니다. 남겨 두려면 그 전에 표를 복사해 두세요.</p>`);
+    <p class="hint">신청자 화면에는 이름이 가려져 보이고, 실명·건명은 아래 <b>보고 이력</b>(관리자 전용)에 날짜별로 보관됩니다.</p>`);
 
   // 끝난 번호표
   const closed = P.tickets.filter(t => ['done', 'timeout', 'cancelled', 'expired'].includes(t.status)).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
@@ -129,7 +172,7 @@ function render() {
 
   // 알림 기록
   const logs = (S.adm.logs || []).slice(0, 40);
-  const KIND = { call: '입실 요청', next: '바로 다음 차례', soon: '곧 차례', remind: '재알림', timeout: '시간 초과 취소', overdue: '완료 확인', expired: '마감', uncall: '호출 취소', test: '테스트' };
+  const KIND = { call: '입실 요청', next: '바로 다음 차례', next2: '종료 전 재알림', paused: '호출 보류 안내', soon: '곧 차례', remind: '재알림', timeout: '시간 초과 취소', overdue: '완료 확인', expired: '마감', uncall: '호출 취소', test: '테스트' };
   setHTML($('#logs'), `<h2>오늘 알림 기록</h2><div>${logs.map(l => `<div class="logi"><span><span class="num">${L.hm(l.at)}</span> · ${L.pad(l.no)}번 · ${KIND[l.kind] || l.kind}</span>${l.ok ? '<span class="tag ok">전달</span>' : `<span class="tag red" title="${esc(l.error || '')}">${l.error === 'no-device' ? '대리 접수' : '실패'}</span>`}</div>`).join('') || '<p class="sub">아직 보낸 알림이 없습니다.</p>'}</div>`);
 }
 
@@ -138,8 +181,8 @@ function fillSettings() {
   if (api.mode === 'server' && !S.adm.settings) return; // 관리자용 설정(비밀 주소 포함)을 받은 뒤 채움
   const s = { ...S.pub.settings, ...(S.adm.settings || {}) };
   $('#s-icalUrl').value = s.icalUrl || '';
-  for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) $('#s-' + k).value = s[k];
-  for (const k of ['extKeywords', 'localKeywords', 'places']) $('#s-' + k).value = String(s[k] || '').split(',').map(x => x.trim()).join(', ');
+  for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'prepMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) $('#s-' + k).value = s[k];
+  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'places']) $('#s-' + k).value = String(s[k] || '').split(',').map(x => x.trim()).join(', ');
   for (const k of ['lunch', 'requirePush', 'showEventTitles']) $('#s-' + k).checked = s[k] !== false;
   S.settingsFilled = true;
 }
@@ -157,6 +200,7 @@ document.addEventListener('click', async e => {
     } catch (err) { showError(err); }
     return;
   }
+  if (await histClick(e)) return;
   if (e.target.closest('#copy-reported')) {
     try { await navigator.clipboard.writeText(S.reportedText || ''); toast('표를 복사했습니다', '엑셀이나 한글에 붙여 넣으세요.'); }
     catch { toast('복사하지 못했습니다', '브라우저가 복사를 막았습니다. 표를 직접 선택해 복사해 주세요.'); }
@@ -186,8 +230,8 @@ $('#set-form').addEventListener('submit', async e => {
   $('#s-err').textContent = '';
   const values = {};
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'icalUrl']) values[k] = $('#s-' + k).value.trim();
-  for (const k of ['callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) values[k] = Number($('#s-' + k).value);
-  for (const k of ['extKeywords', 'localKeywords', 'places']) values[k] = $('#s-' + k).value;
+  for (const k of ['callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'prepMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) values[k] = Number($('#s-' + k).value);
+  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'places']) values[k] = $('#s-' + k).value;
   for (const k of ['lunch', 'requirePush', 'showEventTitles']) values[k] = $('#s-' + k).checked;
   const code = $('#s-accessCode').value.trim();
   try {

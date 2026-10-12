@@ -39,6 +39,9 @@ export const DEFAULTS = {
   extKeywords: '출장,외부,대외,현장,공항,KTX,SRT,방송,언론',
   // 전주·완주(내부)로 보는 장소 낱말: 장소에 있으면 대외로 보지 않습니다. (지역 이름이 함께 있으면 지역이 우선)
   localKeywords: '전주,완주,혁신도시,농촌진흥청,농진청,본청,농과원,식량원,원예원,축산원,농업과학원,식량과학원,원예특작,축산과학원,인재개발센터,회의실,강당,오디토리움,국장실,청장실,차장실,집무실,층',
+  // 회의 준비: 제목·장소·설명 어디든 이 낱말이 있는 일정은 시작 전 prepMin분 동안도 호출하지 않습니다.
+  prepKeywords: '2회의실',
+  prepMin: 30,
   requirePush: true,     // 알림 테스트를 통과해야 번호표 발급
   showEventTitles: true, // 신청자 화면(대기 현황)에도 국장님 일정 제목 표시
   defaultMin: 10,        // 보고 기록이 없을 때 쓰는 1인 보고 시간
@@ -90,7 +93,9 @@ export function blocks(s, dayDoc, day, now) {
   if (s.lunch) list.push({ s: at(day, '12:00'), e: at(day, '13:00'), kind: 'lunch' });
   for (const b of (dayDoc && dayDoc.busy) || []) {
     // 대외 일정은 끝난 뒤 복귀 시간만큼, 내부 일정은 여유 시간만큼 더 막습니다.
-    list.push({ s: b.s, e: b.e + (b.ext ? retMinOf(b, s) : s.resumeBufferMin) * MIN, kind: 'busy', ext: !!b.ext, raw: b });
+    // 회의 준비 일정(예: 2회의실)은 시작 전 prepMin분도 막습니다.
+    const pre = b.pre ? s.prepMin : 0;
+    list.push({ s: b.s - pre * MIN, e: b.e + (b.ext ? retMinOf(b, s) : s.resumeBufferMin) * MIN, kind: 'busy', ext: !!b.ext, pre: pre > 0, raw: b });
   }
   const pm = presenceMode(s, now);
   if (pm === 'present') {
@@ -127,7 +132,7 @@ export function availability(sIn, dayDoc, now) {
   if (now < ws) return { ok: false, why: 'before', until: nextFree(ws, c.avg, c) };
   if (now >= we) return { ok: false, why: 'closed', until: null };
   const cur = c.bl.find(b => now >= b.s && now < b.e);
-  if (cur) return { ok: false, why: cur.kind, block: cur, until: nextFree(cur.e, c.avg, c) };
+  if (cur) return { ok: false, why: cur.kind, block: cur, now, until: nextFree(cur.e, c.avg, c) };
   const f = nextFree(now, c.avg, c);
   if (f !== now) {
     const nb = c.bl.find(b => b.s > now);
@@ -142,6 +147,7 @@ export function whyText(av) {
   if (k === 'closed') return '오늘 보고 마감';
   if (k === 'lunch') return '점심시간';
   if (k === 'absent') return '국장님 부재';
+  if (k === 'busy' && av.block.pre && av.block.raw && av.now < av.block.raw.s) return `회의 준비 · ${hm(av.block.raw.s)} 회의`;
   if (k === 'busy' && av.block.ext) return av.until == null ? '대외 일정 · 오늘 복귀 어려움' : `대외 일정 · ${hm(av.block.e)}경 복귀`;
   if (k === 'busy') return `국장님 일정 ${hm(av.block.raw ? av.block.raw.s : av.block.s)}~${hm(av.block.raw ? av.block.raw.e : av.block.e)}`;
   if (k === 'tooShort') return '곧 일정이 있어 대기';
@@ -184,8 +190,10 @@ export function noticeText(kind, t, sIn, extra = {}) {
   const s = withDefaults(sIn);
   const no = pad(t.no), o = s.officeName;
   switch (kind) {
-    case 'call': return { title: `${no}번, 지금 입실해 주세요`, body: `${o}에 들어가며 '보고 시작'을 눌러 주세요. ${s.callLimitMin}분 안에 누르지 않으면 자동 취소됩니다.` };
-    case 'next': return { title: '바로 다음 차례입니다', body: `앞 분이 보고를 시작했습니다. ${o} 문 앞에서 기다려 주세요. 앞 보고가 끝나면 바로 호출됩니다.` };
+    case 'call': return { title: `${no}번, 지금 입실해 주세요`, body: `${extra.after ? '앞 분 보고가 끝났습니다. ' : ''}${o}에 들어가며 '보고 시작'을 눌러 주세요. ${s.callLimitMin}분 안에 누르지 않으면 자동 취소됩니다.` };
+    case 'next': return { title: '바로 다음 차례입니다', body: `앞 분이 보고를 시작했습니다${extra.endAt ? `(${hm(extra.endAt)}경 끝날 예정)` : ''}. ${o} 문 앞에서 기다려 주세요. 앞 보고가 끝나면 바로 호출됩니다.` };
+    case 'next2': return { title: `앞 보고가 ${extra.lead ?? ''}분쯤 남았습니다`, body: `${extra.endAt ? hm(extra.endAt) + '경 끝날 예정입니다. ' : ''}${o} 문 앞에서 기다려 주세요. 끝나면 바로 호출됩니다.` };
+    case 'paused': return { title: '앞 보고가 끝났습니다', body: `지금은 바로 부를 수 없습니다${extra.why ? `(${extra.why})` : ''}. ${extra.until ? hm(extra.until) + '경 호출 예정입니다.' : '호출되면 다시 알려 드립니다.'} 순서는 그대로입니다.` };
     case 'soon': return { title: '곧 차례입니다', body: `앞 대기 ${extra.ahead ?? '-'}명, ${extra.etaAt ? hm(extra.etaAt) + '경' : '곧'} 호출 예상입니다. ${o} 근처로 와 주세요.` };
     case 'remind': return { title: `${no}번, '보고 시작'을 눌러 주세요`, body: `호출되었습니다. ${extra.left ?? 1}분 안에 누르지 않으면 번호표가 자동 취소되고 다음 분이 호출됩니다.` };
     case 'timeout': return { title: '번호표가 취소되었습니다', body: `호출 후 ${s.callLimitMin}분 안에 '보고 시작'이 없어 다음 분을 호출했습니다. 사정이 있었다면 비서실에 말씀해 주세요.` };
@@ -194,7 +202,7 @@ export function noticeText(kind, t, sIn, extra = {}) {
     case 'expired': return { title: '오늘 보고가 마감되었습니다', body: '내일 다시 번호표를 받아 주세요.' };
     case 'uncall': return { title: '호출이 잠시 취소되었습니다', body: '앞 보고가 계속되고 있습니다. 순서는 그대로입니다.' };
     case 'test': return { title: '알림 테스트', body: '이 알림이 보이면 준비가 끝났습니다.' };
-    default: return { title: '보고 대기', body: '' };
+    default: return { title: '줄안서', body: '' };
   }
 }
 
@@ -244,10 +252,18 @@ export function tick(ticketsIn, sIn, dayDoc, now) {
   if (!T.some(t => ACTIVE.includes(t.status)) && now < we && availability(s, dayDoc, now).ok) {
     const w = T.filter(t => t.status === 'waiting').sort(byOrder)[0];
     if (w) {
+      const after = !!w.flags.next; // 문 앞에서 기다리던 분 → "앞 보고가 끝났습니다"
       set(w, { status: 'called', calledAt: now });
       w.flags.remindN = 0;
-      flag(w, 'call', 'soon', 'next');
-      note(w, 'call');
+      flag(w, 'call', 'soon', 'next', 'next2');
+      note(w, 'call', { after });
+    }
+  } else if (!T.some(t => ACTIVE.includes(t.status)) && now < we) {
+    // 앞 보고가 끝났는데 국장님 일정 등으로 바로 부를 수 없으면, 문 앞에서 기다리던 분에게 한 번 알려 줍니다.
+    const w = T.filter(t => t.status === 'waiting').sort(byOrder)[0];
+    if (w && w.flags.next && !w.flags.paused) {
+      const av = availability(s, dayDoc, now);
+      flag(w, 'paused'); note(w, 'paused', { why: whyText(av), until: av.until });
     }
   }
   // 6) 바로 다음 차례(앞 사람 보고 시작 시) · 곧 차례
@@ -257,7 +273,13 @@ export function tick(ticketsIn, sIn, dayDoc, now) {
     const mins = e == null ? Infinity : (e - now) / MIN;
     const a = q.ahead[t.id];
     // 앞 사람이 '보고 시작'을 누르면(보고 중) 바로 다음 사람에게 '문 앞 대기' 알림 — 예상 시간과 관계없이
-    if (a === 1 && q.active.some(x => x.status === 'in_progress') && !t.flags.next) { flag(t, 'next', 'soon'); note(t, 'next'); }
+    const cur = a === 1 ? q.active.find(x => x.status === 'in_progress') : null;
+    // 앞 보고의 예상 종료 전 한 번 더: 20분 이상 보고 → 10분 전, 15분 이상 → 5분 전
+    const exp = cur ? expectedMs(cur, s) : 0;
+    const lead = exp >= 20 * MIN ? 10 : exp >= 15 * MIN ? 5 : 0;
+    const inLead = cur && lead && now >= cur.startedAt + exp - lead * MIN;
+    if (cur && !t.flags.next) { flag(t, 'next', 'soon'); if (inLead) flag(t, 'next2'); note(t, 'next', { endAt: cur.startedAt + exp }); }
+    else if (cur && inLead && !t.flags.next2) { flag(t, 'next2'); note(t, 'next2', { lead, endAt: cur.startedAt + exp }); }
     else if (a <= s.soonAhead && mins <= s.soonMin && !t.flags.soon && !t.flags.next) { flag(t, 'soon'); note(t, 'soon', { ahead: a, etaAt: e }); }
   }
   return { updates: [...changed].map(([id, patch]) => ({ id, patch })), notices };
@@ -399,7 +421,8 @@ export function cleanSettings(input) {
     for (const it of items) if (!/^[^=]{1,20}=\s*(\d{1,4}|\d{1,4}\s*분|종일)$/.test(it)) fail('invalid-argument', `출장 지역 형식이 맞지 않습니다: "${it}" (예: 서울=230, 제주=300분, 해외=종일)`);
     o.places = items.join(', ').slice(0, 3000);
   }
-  for (const k of ['extKeywords', 'localKeywords']) if (input[k] != null) o[k] = String(input[k]).split(/[,\n]/).map(x => x.trim()).filter(Boolean).join(',').slice(0, 1000); num('defaultMin', 3, 60);
+  num('prepMin', 0, 120);
+  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords']) if (input[k] != null) o[k] = String(input[k]).split(/[,\n]/).map(x => x.trim()).filter(Boolean).join(',').slice(0, 1000); num('defaultMin', 3, 60);
   if (o.remindEveryMin != null && o.callLimitMin != null && o.remindEveryMin > o.callLimitMin) fail('invalid-argument', '재알림 간격은 자동 취소 시간보다 길 수 없습니다.');
   return o;
 }
@@ -446,13 +469,43 @@ export function extInfo(ev, sIn) {
   return { ext: false };
 }
 export const isExternal = (ev, s) => extInfo(ev, s).ext;
+// 회의 준비가 필요한 일정인지: 제목·장소·설명 어디든 낱말이 있으면 true (띄어쓰기 무시, '12회의실'은 '2회의실'로 보지 않음)
+export function needsPrep(ev, sIn) {
+  const s = withDefaults(sIn);
+  if (!(s.prepMin > 0)) return false;
+  const text = `${ev.title || ''} ${ev.loc || ''} ${ev.desc || ''}`.replace(/\s+/g, '').toLowerCase();
+  return kw(s.prepKeywords).some(k => {
+    k = k.replace(/\s+/g, '');
+    for (let i = text.indexOf(k); i >= 0; i = text.indexOf(k, i + 1)) if (!(/^\d/.test(k) && /\d/.test(text[i - 1] || ''))) return true;
+    return false;
+  });
+}
 // 공개용 일정 목록(제목 없이 시각·대외 여부·복귀 시간만)
 // withTitle: 신청자 화면에도 일정 제목을 보여 줄지(관리 설정 showEventTitles)
 export function publicBusy(list, withTitle = false) {
   return (list || []).map(b => {
     const o = { s: b.s, e: b.e };
     if (b.ext) { o.ext = true; o.ret = b.ret ?? null; }
+    if (b.pre) o.pre = true;
     if (withTitle && b.title) o.title = String(b.title).slice(0, 80);
     return o;
   });
+}
+
+// ---------- 보고 이력(관리자 전용, 지우지 않고 보관) ----------
+// 보고를 마친 번호표 → [{ no, name, dept, topic, s, e, min, refMin, proxy, urgent }] (시작 순)
+export function historyRows(tickets, priv = {}) {
+  return (tickets || []).filter(t => t.status === 'done')
+    .sort((a, b) => (a.startedAt || a.doneAt) - (b.startedAt || b.doneAt))
+    .map(t => ({
+      no: t.no, name: priv[t.id]?.name || t.maskedName || '', dept: t.dept || '', topic: priv[t.id]?.topic || '',
+      s: t.startedAt || t.doneAt, e: t.doneAt, min: Math.max(0, Math.round((t.doneAt - (t.startedAt || t.doneAt)) / MIN)),
+      refMin: t.refMin || null, proxy: !!t.proxy, urgent: !!t.urgent,
+    }));
+}
+// 엑셀·한글에 붙여 넣는 표(탭 구분). withDay: 날짜 칸 포함
+export function historyText(rows, withDay = false) {
+  const head = [...(withDay ? ['날짜'] : []), '순번', '번호', '이름', '부서', '보고 건명', '시작', '완료', '소요(분)', '예상(분)'];
+  return [head, ...rows.map((r, i) => [...(withDay ? [r.day] : []), i + 1, pad(r.no), r.name, r.dept, r.topic, hm(r.s), hm(r.e), r.min, r.refMin || ''])]
+    .map(a => a.map(x => String(x ?? '').replace(/[\t\n]/g, ' ')).join('\t')).join('\n');
 }
