@@ -226,3 +226,12 @@ a.btn{text-decoration:none}
 .rtable td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
 .rtable td.num{white-space:nowrap;font-variant-numeric:tabular-nums}
 .rtable tr:last-child td{border-bottom:0}
+
+/* 국장님 긴급 호출 */
+.card.emerg{border:1.5px dashed color-mix(in srgb,var(--red) 45%,transparent);background:color-mix(in srgb,var(--red-soft) 40%,var(--card, #fff))}
+.card.emerg h3{color:var(--red)}
+.btn.danger-outline{border:1px solid color-mix(in srgb,var(--red) 40%,transparent);color:var(--red)}
+
+.btn.two-line{flex-direction:column;gap:2px;line-height:1.3;padding-top:10px;padding-bottom:10px}
+.btn.two-line b{font-weight:700}
+.btn.two-line small{font-size:13px;font-weight:500;opacity:.8}

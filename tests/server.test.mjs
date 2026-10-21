@@ -131,8 +131,8 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
   await assert.rejects(op('b', { op: 'start', ticketId: r1.id }), { code: 'permission-denied' });
   setNow(T('09:22')); from = inbox.length; await op('a', { op: 'start', ticketId: r1.id });
   assert.equal(byNo(1).status, 'in_progress');
-  assert.deepEqual(got(from), ['b:next'], '보고 시작을 누르면 다음 사람에게 문 앞 대기 알림');
-  assert.match(inbox.at(-1).body, /앞 분이 보고를 시작/);
+  assert.deepEqual(got(from), ['b:next', 'c:near'], '보고 시작을 누르면 다음 분은 문 앞 대기, 그다음 분은 곧 차례(내 앞 1명)');
+  assert.match(inbox.at(-2).body, /앞 분이 보고를 시작/); assert.match(inbox.at(-1).body, /내 앞에 1명/);
   setNow(T('09:34')); from = inbox.length;
   await op('a', { op: 'complete', ticketId: r1.id });
   assert.equal(byNo(1).status, 'done'); assert.equal(byNo(2).status, 'called');
@@ -265,4 +265,98 @@ test('대외 일정: 자동 판단, 관리자가 바꾸기, 공개 화면 일정
   await op('adm', { op: 'eventExt', key: ev[1].key, ext: null });
   setNow(T('15:31')); pub = await srv.publicState();
   assert.equal(pub.dayDoc.busy[1].ext, true, '자동 판단으로 되돌림');
+});
+
+test('취소: 대기자·호출된 분·보고 중인 분이 빠지면 다음 분에게 알림이 제대로 감', async () => {
+  const { srv, op, ready, admin, byNo, got, setNow, inbox } = setup();
+  for (const u of ['a', 'b', 'c', 'd']) await ready(u);
+  await admin();
+  setNow(T('09:00')); await srv.publicState();
+  let from = inbox.length;
+  setNow(T('09:01'));
+  await op('a', { op: 'issue', name: '가', dept: '기획' });
+  await op('b', { op: 'issue', name: '나', dept: '총괄' });
+  await op('c', { op: 'issue', name: '다', dept: '운영' });
+  await op('d', { op: 'issue', name: '라', dept: '정책' });
+  assert.deepEqual(got(from), ['a:call', 'b:soon', 'c:soon']);
+
+  // ① A 보고 시작 → B 문 앞 대기
+  from = inbox.length; setNow(T('09:02')); await op('a', { op: 'start', ticketId: byNo(1).id });
+  assert.deepEqual(got(from), ['b:next', 'c:near']);
+  // ② 문 앞에서 기다리던 B가 취소 → C가 바로 '문 앞 대기', D는 '곧 차례'
+  from = inbox.length; setNow(T('09:03')); await op('b', { op: 'cancel', ticketId: byNo(2).id });
+  assert.equal(byNo(2).status, 'cancelled');
+  assert.deepEqual(got(from), ['c:next', 'd:near']);
+  // ③ A 완료 → C 입실 요청
+  from = inbox.length; setNow(T('09:08')); await op('a', { op: 'complete', ticketId: byNo(1).id });
+  assert.deepEqual(got(from), ['c:call']);
+
+  // ④ 호출된 C를 비서실이 취소 → D가 바로 입실 요청
+  from = inbox.length; setNow(T('09:09')); await op('adm', { op: 'cancel', ticketId: byNo(3).id });
+  assert.equal(byNo(3).status, 'cancelled'); assert.equal(byNo(4).status, 'called');
+  assert.deepEqual(got(from), ['d:call']);
+  // ⑤ 호출된 본인은 직접 취소 불가(3분 지나면 자동 취소 → 다음 분 호출)
+  await assert.rejects(op('d', { op: 'cancel', ticketId: byNo(4).id }), { code: 'failed-precondition' });
+  // ⑥ 보고 중인 D를 비서실이 취소 → 대기자 없으면 조용히 끝
+  setNow(T('09:10')); await op('d', { op: 'start', ticketId: byNo(4).id });
+  from = inbox.length; await op('adm', { op: 'cancel', ticketId: byNo(4).id });
+  assert.deepEqual(got(from), []);
+
+});
+
+test('개선: 긴급 호출 · 보고 시작 불가 · 보고 종료 · 설치 앱에서만 발급', async () => {
+  const { srv, op, ready, admin, byNo, got, setNow, inbox, day } = setup();
+  for (const u of ['a', 'b', 'c', 'e', 'f']) await ready(u);
+  await admin();
+  setNow(T('09:00')); await srv.publicState();
+
+  // 설치 앱에서만: 휴대폰 브라우저 화면(mobile, app 아님)은 거절, 설치 앱·PC는 허용
+  await assert.rejects(op('a', { op: 'issue', name: '가', dept: '기획', mobile: true, app: false }), { code: 'failed-precondition', message: /홈 화면에 설치한/ });
+  setNow(T('09:01'));
+  await op('a', { op: 'issue', name: '가', dept: '기획', mobile: true, app: true });
+  await op('b', { op: 'issue', name: '나', dept: '총괄', mobile: true, app: true });
+  await op('c', { op: 'issue', name: '다', dept: '운영' });
+  assert.equal(byNo(1).status, 'called');
+
+  // ① 보고 시작 불가: 호출된 A가 누르면 3분이 지나도 취소되지 않고, 5분마다 안내
+  let from = inbox.length;
+  await op('a', { op: 'cantStart', ticketId: byNo(1).id });
+  setNow(T('09:05')); await srv.publicState();
+  assert.equal(byNo(1).status, 'called', '자동 취소 안 됨');
+  setNow(T('09:06')); from = inbox.length; await srv.publicState();
+  assert.deepEqual(got(from), ['a:blockRemind']);
+  assert.equal(byNo(2).status, 'waiting', '다음 분을 부르지 않음(순서 유지)');
+
+  // ② 긴급 호출: 대기 중이던 E(번호표 없음)가 누르면 바로 보고 중, 호출돼 있던 A는 맨 앞 대기로 + 안내
+  setNow(T('09:07')); from = inbox.length;
+  const er = await op('e', { op: 'emergency', name: '마', dept: '기획조정과' });
+  const em = day().tickets.find(t => t.id === er.id);
+  assert.equal(em.status, 'in_progress'); assert.equal(em.emergency, true);
+  assert.equal(byNo(1).status, 'waiting'); assert.equal(byNo(1).blockedAt, null);
+  assert.ok(got(from).includes('a:emergHold'));
+  assert.match(inbox.find(m => m.to === 'a' && m.kind === 'emergHold').body, /맨 앞/);
+  // 긴급 보고 중엔 아무도 호출하지 않음
+  setNow(T('09:15')); await srv.publicState();
+  assert.ok(['a', 'b', 'c'].every((u, i) => byNo(i + 1).status === 'waiting'));
+  // 긴급 보고 끝 → A부터 다시 호출
+  setNow(T('09:20')); from = inbox.length; await op('e', { op: 'complete', ticketId: er.id });
+  assert.equal(byNo(1).status, 'called'); assert.ok(got(from).includes('a:call'));
+
+  // ③ 보고 중인 분이 있을 때 긴급 호출: 보고 중인 분은 그대로
+  await op('a', { op: 'start', ticketId: byNo(1).id });
+  setNow(T('09:22'));
+  await op('f', { op: 'emergency', name: '바', dept: '총괄' });
+  assert.equal(byNo(1).status, 'in_progress', '보고 중인 분은 그대로');
+  setNow(T('09:30')); await op('a', { op: 'complete', ticketId: byNo(1).id });
+  assert.equal(byNo(2).status, 'waiting', '긴급 보고가 남아 있으면 다음 분 호출 안 함');
+
+  // ④ 보고 종료: 누르면 되돌리기 불가
+  await assert.rejects(op('a', { op: 'finalize', ticketId: byNo(2).id }), { code: 'permission-denied' });
+  await op('a', { op: 'finalize', ticketId: byNo(1).id });
+  assert.equal(byNo(1).flags.final, true);
+  await assert.rejects(op('a', { op: 'undo', ticketId: byNo(1).id }), /보고 종료/);
+
+  // 보고 이력에 긴급 호출 표시
+  const h = await op('adm', { op: 'history', day: DAY });
+  assert.ok(h.rows.some(r => r.emergency && r.name === '마'));
 });

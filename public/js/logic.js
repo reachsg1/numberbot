@@ -43,6 +43,7 @@ export const DEFAULTS = {
   prepKeywords: '2회의실',
   prepMin: 30,
   requirePush: true,     // 알림 테스트를 통과해야 번호표 발급
+  requireInstall: true,  // 휴대폰은 홈 화면에 설치한 앱에서만 번호표 발급
   showEventTitles: true, // 신청자 화면(대기 현황)에도 국장님 일정 제목 표시
   defaultMin: 10,        // 보고 기록이 없을 때 쓰는 1인 보고 시간
   avgMs: 0,              // 실제 보고 시간 평균(서버가 갱신)
@@ -201,6 +202,11 @@ export function noticeText(kind, t, sIn, extra = {}) {
     case 'appt': return { title: '곧 보고 시각입니다', body: `지정하신 ${hm(t.appointAt)}까지 10분 남았습니다. ${o} 근처로 와 주세요.` };
     case 'expired': return { title: '오늘 보고가 마감되었습니다', body: '내일 다시 번호표를 받아 주세요.' };
     case 'uncall': return { title: '호출이 잠시 취소되었습니다', body: '앞 보고가 계속되고 있습니다. 순서는 그대로입니다.' };
+    case 'near': return { title: '곧 차례입니다 — 내 앞 1명', body: `보고가 시작되었습니다. 이제 내 앞에 1명 남았어요. ${o} 근처로 와 주세요.` };
+    case 'emergHold': return extra.called
+      ? { title: '국장님 긴급 호출로 잠시 멈춥니다', body: `국장님께서 긴급히 다른 분을 부르셔서 호출을 잠시 멈춥니다. 순서는 맨 앞 그대로이고, 끝나면 바로 다시 호출합니다.` }
+      : { title: '국장님 긴급 호출 보고가 먼저 진행됩니다', body: `순서는 그대로입니다. 끝나면 이어서 부르니 잠시 기다려 주세요.` };
+    case 'blockRemind': return { title: `${no}번, 들어가실 때 '보고 시작'을 눌러 주세요`, body: `입실 대기 중입니다. 앞 분이 나오면 들어가며 '보고 시작'을 눌러 주세요. 오늘 보고를 못 하시게 되면 비서실에 말씀해 주세요.` };
     case 'test': return { title: '알림 테스트', body: '이 알림이 보이면 준비가 끝났습니다.' };
     default: return { title: '줄안서', body: '' };
   }
@@ -228,6 +234,11 @@ export function tick(ticketsIn, sIn, dayDoc, now) {
   // 3) 호출 후 N분마다 '보고 시작' 재알림 → 제한 시간(기본 3분)이 지나면 자동 취소
   for (const t of T) {
     if (t.status !== 'called') continue;
+    if (t.blockedAt) { // '보고 시작 불가'(다른 분이 먼저 들어감): 자동 취소 멈춤, 5분마다 안내만
+      const k = Math.floor((now - t.blockedAt) / (5 * MIN));
+      if (k >= 1 && k > (t.flags.blockN || 0)) { t.flags.blockN = k; set(t, { flags: { ...t.flags } }); note(t, 'blockRemind'); }
+      continue;
+    }
     const el = now - t.calledAt;
     if (el >= s.callLimitMin * MIN) { set(t, { status: 'timeout', doneAt: now }); note(t, 'timeout'); continue; }
     const k = Math.floor(el / (s.remindEveryMin * MIN));
@@ -268,12 +279,18 @@ export function tick(ticketsIn, sIn, dayDoc, now) {
   }
   // 6) 바로 다음 차례(앞 사람 보고 시작 시) · 곧 차례
   const q = computeQueue(T, s, dayDoc, now);
-  for (const t of q.waiting) {
+  // 보고 중인 분(긴급 호출과 겹치면 가장 늦게 끝날 분 기준). 호출되어 입실 대기 중인 분이 있으면 그분이 먼저라 건너뜀
+  const prog = q.active.filter(x => x.status === 'in_progress');
+  const anyCalled = q.active.some(x => x.status === 'called');
+  const endOf = x => x.startedAt + expectedMs(x, s);
+  const live = prog.length && !anyCalled ? prog.reduce((a, b) => (endOf(a) >= endOf(b) ? a : b)) : null;
+  q.waiting.forEach((t, pos) => {
     const e = q.eta[t.id];
     const mins = e == null ? Infinity : (e - now) / MIN;
     const a = q.ahead[t.id];
-    // 앞 사람이 '보고 시작'을 누르면(보고 중) 바로 다음 사람에게 '문 앞 대기' 알림 — 예상 시간과 관계없이
-    const cur = a === 1 ? q.active.find(x => x.status === 'in_progress') : null;
+    // 누군가 '보고 시작'을 누르면: 바로 다음 분 '문 앞 대기', 그다음 분 '곧 차례(내 앞 1명)' — 예상 시간과 관계없이
+    const cur = pos === 0 ? live : null;
+    if (pos === 1 && live && !t.flags.next && t.flags.nearFor !== live.id) { t.flags.nearFor = live.id; flag(t, 'soon'); note(t, 'near', { no: live.no }); return; }
     // 앞 보고의 예상 종료 전 한 번 더: 20분 이상 보고 → 10분 전, 15분 이상 → 5분 전
     const exp = cur ? expectedMs(cur, s) : 0;
     const lead = exp >= 20 * MIN ? 10 : exp >= 15 * MIN ? 5 : 0;
@@ -281,7 +298,7 @@ export function tick(ticketsIn, sIn, dayDoc, now) {
     if (cur && !t.flags.next) { flag(t, 'next', 'soon'); if (inLead) flag(t, 'next2'); note(t, 'next', { endAt: cur.startedAt + exp }); }
     else if (cur && inLead && !t.flags.next2) { flag(t, 'next2'); note(t, 'next2', { lead, endAt: cur.startedAt + exp }); }
     else if (a <= s.soonAhead && mins <= s.soonMin && !t.flags.soon && !t.flags.next) { flag(t, 'soon'); note(t, 'soon', { ahead: a, etaAt: e }); }
-  }
+  });
   return { updates: [...changed].map(([id, patch]) => ({ id, patch })), notices };
 }
 
@@ -305,6 +322,7 @@ export function actIssue(input, ctx, tickets, sIn, dayDoc, now) {
   if (refMin != null) refMin = Math.round(refMin);
   if (now >= we) fail('failed-precondition', '오늘 보고 시간이 끝났습니다. 내일 다시 받아 주세요.');
   if (!proxy) {
+    if (s.requireInstall && input.mobile && !input.app && !ctx.isAdmin) fail('failed-precondition', '홈 화면에 설치한 「줄안서」 앱에서만 번호표를 받을 수 있습니다. 앱을 설치한 뒤 홈 화면의 줄안서 아이콘으로 열어 주세요.');
     if (s.requirePush && !ctx.deviceVerified) fail('failed-precondition', '먼저 알림을 켜고 테스트 알림을 받아 주세요.');
     const mine = tickets.find(t => t.day === day && t.uid === ctx.uid && OPEN.includes(t.status));
     if (mine) fail('already-exists', `이미 ${pad(mine.no)}번 번호표가 있습니다. 새로 받으려면 먼저 취소해 주세요.`);
@@ -324,7 +342,7 @@ export function actIssue(input, ctx, tickets, sIn, dayDoc, now) {
 export function actStart(t, ctx, now) {
   if (!(isOwner(t, ctx) || ctx.isAdmin)) fail('permission-denied', '본인 번호표만 시작할 수 있습니다.');
   if (t.status !== 'called') fail('failed-precondition', '호출된 번호표만 보고를 시작할 수 있습니다.');
-  return { status: 'in_progress', startedAt: now };
+  return { status: 'in_progress', startedAt: now, blockedAt: null };
 }
 
 export function actComplete(t, ctx, now) {
@@ -344,9 +362,53 @@ export function nextAvg(s, dur) {
   return Math.round(base * 0.7 + dur * 0.3);
 }
 
+// '보고 종료': 완료 후 되돌리기 기회를 닫고 확정
+export function actFinalize(t, ctx) {
+  if (!isOwner(t, ctx) && !ctx.isAdmin) fail('permission-denied', '본인 번호표만 종료할 수 있습니다.');
+  if (t.status !== 'done') fail('failed-precondition', '보고를 마친 번호표만 종료할 수 있습니다.');
+  return { flags: { ...(t.flags || {}), final: true } };
+}
+
+// '보고 시작 불가': 호출됐지만 다른 분이 먼저 들어가 있어 시작을 못 누르는 경우 — 자동 취소를 멈추고 순서 유지
+export function actCantStart(t, ctx, now) {
+  if (!(isOwner(t, ctx) || ctx.isAdmin)) fail('permission-denied', '본인 번호표만 바꿀 수 있습니다.');
+  if (t.status !== 'called') fail('failed-precondition', '호출된 번호표에서만 누를 수 있습니다.');
+  if (t.blockedAt) return {};
+  return { blockedAt: now, flags: { ...(t.flags || {}), blockN: 0 } };
+}
+
+// '국장님 긴급 호출': 순서와 관계없이 바로 보고 중으로. 지금 보고 중인 분은 그대로 두고,
+// 호출되어 입실 대기 중이던 분은 대기열 맨 앞으로 되돌려 호출을 멈춥니다(긴급 보고가 끝나면 다시 호출).
+export function actEmergency(input, ctx, tickets, sIn, dayDoc, now) {
+  const day = dayKey(now);
+  const T = tickets.filter(t => t.day === day);
+  let mine = input.ticketId ? T.find(t => t.id === input.ticketId) : T.find(t => t.uid === ctx.uid && OPEN.includes(t.status));
+  if (input.ticketId && !mine) fail('not-found', '번호표를 찾을 수 없습니다.');
+  if (mine && !(isOwner(mine, ctx) || ctx.isAdmin)) fail('permission-denied', '본인 번호표만 바꿀 수 있습니다.');
+  if (mine && !OPEN.includes(mine.status)) mine = null;
+  if (mine && mine.status === 'in_progress') fail('failed-precondition', '이미 보고 중입니다.');
+  const go = { status: 'in_progress', calledAt: now, startedAt: now, blockedAt: null, emergency: true, open: true };
+  let create = null;
+  const updates = [], notices = [];
+  if (mine) updates.push({ id: mine.id, patch: { ...go, flags: { ...(mine.flags || {}), call: true, next: true, soon: true } } });
+  else {
+    const r = actIssue({ ...input, app: true }, { ...ctx, deviceVerified: true }, tickets, sIn, dayDoc, now);
+    create = { ticket: { ...r.ticket, ...go, flags: { call: true, next: true, soon: true } }, priv: r.priv };
+  }
+  for (const o of T) {
+    if (mine && o.id === mine.id) continue;
+    if (o.status === 'called') {
+      updates.push({ id: o.id, patch: { status: 'waiting', calledAt: null, blockedAt: null, flags: { ...(o.flags || {}), call: false, remindN: 0 } } });
+      notices.push({ id: o.id, kind: 'emergHold', extra: { called: true } });
+    } else if (o.status === 'waiting' && o.flags?.next) notices.push({ id: o.id, kind: 'emergHold', extra: {} });
+  }
+  return { create, updates, notices };
+}
+
 export function actUndo(t, ctx, tickets, now) {
   if (!isOwner(t, ctx) && !ctx.isAdmin) fail('permission-denied', '본인 번호표만 되돌릴 수 있습니다.');
   if (t.status !== 'done' || now - t.doneAt > MIN) fail('failed-precondition', '완료 후 1분 안에만 되돌릴 수 있습니다.');
+  if (t.flags?.final) fail('failed-precondition', "이미 '보고 종료'를 눌렀습니다.");
   const updates = [{ id: t.id, patch: { status: 'in_progress', doneAt: null } }];
   const notices = [];
   for (const o of tickets) {
@@ -407,7 +469,7 @@ export function cleanSettings(input) {
   if (input.officeName != null) o.officeName = String(input.officeName).trim().slice(0, 20) || '국장실';
   for (const k of ['workStart', 'workEnd']) if (input[k] != null) { if (!validHM(input[k])) fail('invalid-argument', '시각은 07:00처럼 입력해 주세요(자정은 24:00).'); o[k] = input[k]; }
   if ((o.workStart || '00:00') >= (o.workEnd || '99:99')) fail('invalid-argument', '보고 시작 시각이 종료 시각보다 빨라야 합니다.');
-  for (const k of ['lunch', 'requirePush', 'showEventTitles']) if (input[k] != null) o[k] = !!input[k];
+  for (const k of ['lunch', 'requirePush', 'requireInstall', 'showEventTitles']) if (input[k] != null) o[k] = !!input[k];
   if (input.calendarId != null) o.calendarId = String(input.calendarId).trim().slice(0, 200);
   if (input.icalUrl != null) {
     const u = String(input.icalUrl).trim();
@@ -500,7 +562,7 @@ export function historyRows(tickets, priv = {}) {
     .map(t => ({
       no: t.no, name: priv[t.id]?.name || t.maskedName || '', dept: t.dept || '', topic: priv[t.id]?.topic || '',
       s: t.startedAt || t.doneAt, e: t.doneAt, min: Math.max(0, Math.round((t.doneAt - (t.startedAt || t.doneAt)) / MIN)),
-      refMin: t.refMin || null, proxy: !!t.proxy, urgent: !!t.urgent,
+      refMin: t.refMin || null, proxy: !!t.proxy, urgent: !!t.urgent, emergency: !!t.emergency,
     }));
 }
 // 엑셀·한글에 붙여 넣는 표(탭 구분). withDay: 날짜 칸 포함

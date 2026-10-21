@@ -132,6 +132,14 @@ export function create() {
           case 'move': { const t = find(); for (const u of L.actMove(t, d.dir === 1 ? 1 : -1, st.tickets)) Object.assign(st.tickets.find(x => x.id === u.id), u.patch); break; }
           case 'urgent': { const t = find(); Object.assign(t, L.actUrgent(t, st.tickets)); break; }
           case 'restore': { const t = find(); Object.assign(t, L.actRestore(t, t0)); break; }
+          case 'cantStart': { const t = find(); Object.assign(t, L.actCantStart(t, ctx, t0)); break; }
+          case 'finalize': { const t = find(); Object.assign(t, L.actFinalize(t, ctx)); break; }
+          case 'emergency': {
+            const r = L.actEmergency(d, ctx, st.tickets, st.settings, st.dayDoc, t0);
+            for (const u of r.updates) Object.assign(st.tickets.find(x => x.id === u.id), L.withOpen(u.patch));
+            if (r.create) { const id = 'd' + Math.random().toString(36).slice(2, 9); const no = st.dayDoc.nextNo || 1; st.dayDoc.nextNo = no + 1; st.tickets.push({ id, ...r.create.ticket, no }); st.priv[id] = r.create.priv; }
+            deliver(st, r.notices, t0); break;
+          }
           case 'presence': { const p = L.presencePatch(d.mode, d.note, st.settings, st.dayDoc, t0); st.settings.presence = p; commit(st); return { ok: true, presence: p }; }
           case 'settings': {
             const o = L.cleanSettings(d.values || {});

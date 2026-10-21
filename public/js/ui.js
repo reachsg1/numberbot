@@ -200,9 +200,9 @@ export function statusLabel(t, s, now) {
   switch (t.status) {
     case 'held': return ['st-wait', '대기 중'];
     case 'waiting': return ['st-wait', '대기 중'];
-    case 'called': return ['st-call', '호출됨 · 입실 대기'];
-    case 'in_progress': return ['st-prog', '보고 중'];
-    case 'done': return ['st-done', '보고 완료'];
+    case 'called': return ['st-call', t.blockedAt ? '입실 대기 · 보고 시작 불가' : '호출됨 · 입실 대기'];
+    case 'in_progress': return ['st-prog', t.emergency ? '보고 중 · 긴급 호출' : '보고 중'];
+    case 'done': return ['st-done', t.flags?.final || (now && now - t.doneAt > 60000) ? '보고 종료' : '보고 완료'];
     case 'timeout': return ['st-off', '시간 초과 취소'];
     case 'cancelled': return ['st-off', '취소'];
     case 'expired': return ['st-off', '마감'];

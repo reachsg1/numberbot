@@ -15,7 +15,7 @@ async function boot() {
   if (!me.isAdmin) { await api.signOut().catch(() => {}); return showLogin(me.error?.code === 'network' ? me.error.message : '로그인이 만료되었습니다. 다시 로그인해 주세요.'); }
   $('#login').hidden = true; $('#main').hidden = false; $('#logout').hidden = api.mode === 'demo';
   api.watch(p => { S.pub = p; render(); fillSettings(); }, e => banner(e.message));
-  // 관리 화면이 켜져 있는 동안 15초마다 실명·기록을 받아 오며, 이때 서버가 호출·알림 판단도 함께 합니다.
+  // 관리 화면이 켜져 있는 동안 10초마다 실명·기록을 받아 오며, 이때 서버가 호출·알림 판단도 함께 합니다.
   api.watchAdmin(a => { banner(''); S.adm = a; render(); fillSettings(); }, e => banner(e.message));
   loadSecret();
   loadHistory();
@@ -51,7 +51,7 @@ function renderHistory() {
       <span class="sub">${h.rows.length}명${h.rows.length ? ` · 총 ${total}분 · 평균 ${Math.round(total / h.rows.length)}분` : ''}</span>
     </div>
     ${h.rows.length ? `<div class="rtable"><table><thead><tr><th>#</th><th>번호</th><th>이름</th><th>부서</th><th>보고 건명</th><th>시간</th><th>소요</th></tr></thead><tbody>
-      ${h.rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td class="num">${L.pad(r.no)}</td><td class="nw"><b>${esc(r.name)}</b>${r.proxy ? '<span class="tag">대리</span>' : ''}${r.urgent ? '<span class="tag amber">긴급</span>' : ''}</td><td class="nw">${esc(r.dept)}</td><td>${esc(r.topic) || '<span class="sub">-</span>'}</td><td class="num">${L.hm(r.s)}~${L.hm(r.e)}</td><td class="num">${r.min}분${r.refMin ? `<small>예상 ${r.refMin}분</small>` : ''}</td></tr>`).join('')}
+      ${h.rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td class="num">${L.pad(r.no)}</td><td class="nw"><b>${esc(r.name)}</b>${r.proxy ? '<span class="tag">대리</span>' : ''}${r.urgent ? '<span class="tag amber">긴급</span>' : ''}${r.emergency ? '<span class="tag red">긴급 호출</span>' : ''}</td><td class="nw">${esc(r.dept)}</td><td>${esc(r.topic) || '<span class="sub">-</span>'}</td><td class="num">${L.hm(r.s)}~${L.hm(r.e)}</td><td class="num">${r.min}분${r.refMin ? `<small>예상 ${r.refMin}분</small>` : ''}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="empty">이 날 보고 기록이 없습니다.</p>'}
     <div class="actions"><button class="btn ghost sm" type="button" id="hist-copy" ${h.rows.length ? '' : 'disabled'}>이 날 표 복사</button><button class="btn ghost sm" type="button" id="hist-csv">전체 기간 내려받기 (엑셀 CSV)</button></div>`);
 }
@@ -111,8 +111,9 @@ function render() {
     const exp = L.expectedMs(t, s);
     const overdue = !called && t0 - t.startedAt >= exp;
     const left = called ? t.calledAt + s.callLimitMin * L.MIN - t0 : 0;
+    const blocked = called && t.blockedAt;
     return `<div class="card nowcard ${called ? '' : 'prog'}">
-      <div class="row between"><h3 style="color:${called ? 'var(--red)' : 'var(--accent)'}">${called ? `호출됨 · ${L.hm(t.calledAt)} · 자동 취소까지 ${mmss(left)}` : `보고 중 · ${L.hm(t.startedAt)} 시작 · ${minsAgo(t.startedAt, t0)}분 경과`}</h3>${t.proxy ? '<span class="tag">대리 접수</span>' : ''}${t.flags?.pushFail ? '<span class="tag red">알림 실패</span>' : ''}</div>
+      <div class="row between"><h3 style="color:${called ? 'var(--red)' : 'var(--accent)'}">${blocked ? `입실 대기 · 보고 시작 불가 · ${L.hm(t.blockedAt)}부터 (자동 취소 멈춤)` : called ? `호출됨 · ${L.hm(t.calledAt)} · 자동 취소까지 ${mmss(left)}` : `보고 중 · ${L.hm(t.startedAt)} 시작 · ${minsAgo(t.startedAt, t0)}분 경과`}</h3>${t.emergency ? '<span class="tag red">국장님 긴급 호출</span>' : ''}${t.proxy ? '<span class="tag">대리 접수</span>' : ''}${t.flags?.pushFail ? '<span class="tag red">알림 실패</span>' : ''}</div>
       <div class="row"><span class="num" style="font-size:30px;font-weight:600">${L.pad(t.no)}</span><b>${name(t)}</b><span class="sub">${esc(t.dept)}${t.refMin ? ` · 예상 ${t.refMin}분` : ''}</span></div>
       ${topic(t) ? `<p>${esc(topic(t))}</p>` : ''}
       ${overdue ? `<div class="banner err"><b>예상 시간(${Math.round(exp / 60000)}분) 초과</b> · 본인에게 ${s.overdueEveryMin}분마다 '보고 완료' 확인 알림을 보내는 중입니다${t.flags?.overdueN ? `(${t.flags.overdueN}회)` : ''}. 보고가 끝났다면 대신 완료해 주세요.</div>` : ''}
@@ -135,7 +136,7 @@ function render() {
   S.reportedText = ['순번\t번호\t이름\t부서\t보고 건명\t시작\t완료\t소요(분)\t예상(분)', ...reported.map((t, i) => [i + 1, L.pad(t.no), S.adm.priv[t.id]?.name || t.maskedName, t.dept, topic(t), t.startedAt ? L.hm(t.startedAt) : '', L.hm(t.doneAt), mins(t), t.refMin || ''].join('\t'))].join('\n');
   setHTML($('#reported'), `<div class="row between"><h2>오늘 보고한 분</h2><span class="sub">${reported.length}명 · 총 ${totalMin}분${reported.length ? ` · 평균 ${Math.round(totalMin / reported.length)}분` : ''}</span></div>
     ${reported.length ? `<div class="rtable"><table><thead><tr><th>#</th><th>번호</th><th>이름</th><th>부서</th><th>보고 건명</th><th>시간</th><th>소요</th></tr></thead><tbody>
-      ${reported.map((t, i) => `<tr><td class="num">${i + 1}</td><td class="num">${L.pad(t.no)}</td><td class="nw"><b>${name(t)}</b>${t.proxy ? '<span class="tag">대리</span>' : ''}</td><td class="nw">${esc(t.dept)}</td><td>${esc(topic(t)) || '<span class="sub">-</span>'}</td><td class="num">${t.startedAt ? L.hm(t.startedAt) : ''}~${L.hm(t.doneAt)}</td><td class="num">${mins(t)}분${t.refMin ? `<small>예상 ${t.refMin}분</small>` : ''}</td></tr>`).join('')}
+      ${reported.map((t, i) => `<tr><td class="num">${i + 1}</td><td class="num">${L.pad(t.no)}</td><td class="nw"><b>${name(t)}</b>${t.proxy ? '<span class="tag">대리</span>' : ''}${t.emergency ? '<span class="tag red">긴급 호출</span>' : ''}</td><td class="nw">${esc(t.dept)}</td><td>${esc(topic(t)) || '<span class="sub">-</span>'}</td><td class="num">${t.startedAt ? L.hm(t.startedAt) : ''}~${L.hm(t.doneAt)}</td><td class="num">${mins(t)}분${t.refMin ? `<small>예상 ${t.refMin}분</small>` : ''}</td></tr>`).join('')}
       </tbody></table></div>
       <div class="actions"><button class="btn ghost sm" type="button" id="copy-reported">표 복사 (엑셀·한글에 붙여넣기)</button></div>` : '<p class="empty">아직 보고를 마친 분이 없습니다.</p>'}
     <p class="hint">신청자 화면에는 이름이 가려져 보이고, 실명·건명은 아래 <b>보고 이력</b>(관리자 전용)에 날짜별로 보관됩니다.</p>`);
@@ -172,7 +173,7 @@ function render() {
 
   // 알림 기록
   const logs = (S.adm.logs || []).slice(0, 40);
-  const KIND = { call: '입실 요청', next: '바로 다음 차례', next2: '종료 전 재알림', paused: '호출 보류 안내', soon: '곧 차례', remind: '재알림', timeout: '시간 초과 취소', overdue: '완료 확인', expired: '마감', uncall: '호출 취소', test: '테스트' };
+  const KIND = { call: '입실 요청', next: '바로 다음 차례', near: '곧 차례(내 앞 1명)', emergHold: '긴급 호출 대기 안내', blockRemind: '보고 시작 재안내', next2: '종료 전 재알림', paused: '호출 보류 안내', soon: '곧 차례', remind: '재알림', timeout: '시간 초과 취소', overdue: '완료 확인', expired: '마감', uncall: '호출 취소', test: '테스트' };
   setHTML($('#logs'), `<h2>오늘 알림 기록</h2><div>${logs.map(l => `<div class="logi"><span><span class="num">${L.hm(l.at)}</span> · ${L.pad(l.no)}번 · ${KIND[l.kind] || l.kind}</span>${l.ok ? '<span class="tag ok">전달</span>' : `<span class="tag red" title="${esc(l.error || '')}">${l.error === 'no-device' ? '대리 접수' : '실패'}</span>`}</div>`).join('') || '<p class="sub">아직 보낸 알림이 없습니다.</p>'}</div>`);
 }
 
@@ -183,7 +184,7 @@ function fillSettings() {
   $('#s-icalUrl').value = s.icalUrl || '';
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'prepMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) $('#s-' + k).value = s[k];
   for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'places']) $('#s-' + k).value = String(s[k] || '').split(',').map(x => x.trim()).join(', ');
-  for (const k of ['lunch', 'requirePush', 'showEventTitles']) $('#s-' + k).checked = s[k] !== false;
+  for (const k of ['lunch', 'requirePush', 'requireInstall', 'showEventTitles']) $('#s-' + k).checked = s[k] !== false;
   S.settingsFilled = true;
 }
 
@@ -232,7 +233,7 @@ $('#set-form').addEventListener('submit', async e => {
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'icalUrl']) values[k] = $('#s-' + k).value.trim();
   for (const k of ['callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'prepMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) values[k] = Number($('#s-' + k).value);
   for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'places']) values[k] = $('#s-' + k).value;
-  for (const k of ['lunch', 'requirePush', 'showEventTitles']) values[k] = $('#s-' + k).checked;
+  for (const k of ['lunch', 'requirePush', 'requireInstall', 'showEventTitles']) values[k] = $('#s-' + k).checked;
   const code = $('#s-accessCode').value.trim();
   try {
     const r = await op('settings', { values, accessCode: code && code !== S.code ? code : undefined });

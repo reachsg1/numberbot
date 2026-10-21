@@ -123,14 +123,14 @@ export function create(cfg = {}, first = null) {
         const j = await r.json().catch(() => ({}));
         if (!r.ok) return onErr && onErr({ code: String(r.status), message: j.error?.message || `현황을 불러오지 못했습니다(${r.status}).` });
         takeState(j, false);
-      }, 10000);
+      }, 5000);
       return () => { pubL.delete(cb); stop(); };
     },
-    // 관리자 전용: 실명·건명 · 일정 제목 · 알림 기록 (15초마다, 호출 판단도 함께 돌림)
+    // 관리자 전용: 실명·건명 · 일정 제목 · 알림 기록 (10초마다, 호출 판단도 함께 돌림)
     watchAdmin(cb, onErr) {
       admL.add(cb);
       if (adm) setTimeout(() => cb(adm), 0);
-      const stop = poll(() => api.op('adminState').catch(e => onErr && onErr(e)), 15000);
+      const stop = poll(() => api.op('adminState').catch(e => onErr && onErr(e)), 10000);
       return () => { admL.delete(cb); stop(); };
     },
 

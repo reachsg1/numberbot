@@ -7,6 +7,9 @@ const S = { pub: null, me: { verified: false }, uid: null, tab: null, confirmCan
 const ls = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const standalone = isStandalone();
+const mobile = isIOS || isAndroid;
+// 휴대폰은 홈 화면에 설치한 앱으로 열어야 번호표를 받을 수 있음(관리 설정에서 끌 수 있음)
+const mustInstall = s => api.mode !== 'demo' && mobile && !standalone && s.requireInstall !== false;
 
 demoBar(api, () => { S.uid = api.demo.uid; refreshMe(); render(); });
 
@@ -106,8 +109,25 @@ function render() {
 function renderPushCard(s) {
   const el = $('#push-card');
   const showInstall = installEvt && !standalone;
-  if ((!s.requirePush || S.me.verified) && !showInstall) { el.innerHTML = ''; el.dataset.key = ''; return; }
+  const must = mustInstall(s);
+  if ((!s.requirePush || S.me.verified) && !showInstall && !must) { el.innerHTML = ''; el.dataset.key = ''; return; }
   const needPush = s.requirePush && !S.me.verified;
+  if (must) {
+    const key = 'must' + !!installEvt + isIOS;
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.innerHTML = `<div class="card" style="border-color:var(--accent)">
+      <h2>먼저 앱을 설치해 주세요</h2>
+      <p class="sub">번호표는 <b>홈 화면에 설치한 「줄안서」 앱</b>에서만 받을 수 있습니다. 앱으로 열어야 차례 알림이 확실하게 옵니다.</p>
+      ${isIOS ? `<ol class="sub" style="margin:0;padding-left:18px"><li>Safari 아래쪽 <b>공유 버튼(□↑)</b> 또는 주소창 옆 <b>⋯ → 공유</b>를 누릅니다.</li><li><b>홈 화면에 추가</b>를 누릅니다.</li><li>홈 화면의 <b>줄안서</b> 아이콘으로 다시 열어 알림을 켭니다.</li></ol>`
+        : installEvt ? `<button class="btn block" id="install-btn">홈 화면에 앱 설치</button>`
+        : `<ol class="sub" style="margin:0;padding-left:18px"><li>크롬 오른쪽 위 메뉴 <b>⋮</b>를 누릅니다.</li><li><b>앱 설치</b>(또는 <b>홈 화면에 추가 → 설치</b>)를 누릅니다.</li><li>홈 화면의 <b>줄안서</b> 아이콘으로 다시 열어 알림을 켭니다.</li></ol>`}
+      <p class="hint">이미 설치했다면 이 화면 말고 <b>홈 화면의 줄안서 아이콘</b>으로 열어 주세요. 설치가 계속 '설치 중'에서 멈추면 비서실에 말씀해 주세요(대리 접수 가능).</p>
+    </div>`;
+    const ib = $('#install-btn');
+    ib && ib.addEventListener('click', installApp);
+    return;
+  }
   const iosNeedsInstall = isIOS && !standalone && api.mode !== 'demo';
   const key = 'push' + iosNeedsInstall + api.pushState() + !!showInstall + needPush;
   if (el.dataset.key === key) return;
@@ -134,8 +154,9 @@ addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = 
 addEventListener('appinstalled', () => {
   installEvt = null;
   if (S.pub) render();
-  // 설치가 끝나면 곧바로 알림 설정 화면으로 안내 (앱과 브라우저는 알림 권한을 함께 씁니다)
-  if (!S.me.verified) openPushModal(true);
+  // 설치가 끝나면: 앱으로 열어야 하는 경우엔 아이콘으로 다시 열도록, 아니면 곧바로 알림 설정 안내
+  if (S.pub && mustInstall(S.pub.settings)) toast('설치가 끝났습니다', '홈 화면의 "줄안서" 아이콘으로 다시 열어 알림을 켜 주세요.');
+  else if (!S.me.verified) openPushModal(true);
   else toast('앱을 설치했습니다', '홈 화면의 "줄안서" 아이콘으로 열어 쓰세요.');
 });
 async function installApp() {
@@ -202,10 +223,21 @@ function renderApplyParts(q, s, t0) {
   renderPushCard(s);
   const mt = myTicket();
   const btn = $('#f-submit');
-  const blocked = s.requirePush && !S.me.verified;
+  const needApp = mustInstall(s);
+  const blocked = needApp || (s.requirePush && !S.me.verified);
   btn.disabled = blocked;
-  btn.textContent = mt && L.OPEN.includes(mt.status) ? `이미 ${L.pad(mt.no)}번 번호표가 있습니다` : (blocked ? '알림을 먼저 켜 주세요' : '번호표 받기');
+  btn.textContent = mt && L.OPEN.includes(mt.status) ? `이미 ${L.pad(mt.no)}번 번호표가 있습니다` : needApp ? '설치한 앱에서만 받을 수 있어요' : (blocked ? '알림을 먼저 켜 주세요' : '번호표 받기');
   if (mt && L.OPEN.includes(mt.status)) btn.disabled = true;
+  // 국장님 긴급 호출 카드(보고 중이 아닐 때)
+  const ec = $('#emerg-card');
+  const showE = !(mt && mt.status === 'in_progress');
+  const ekey = showE ? 'e' + (mt && L.OPEN.includes(mt.status) ? mt.id : '') : '';
+  if (ec.dataset.key !== ekey) {
+    ec.dataset.key = ekey;
+    ec.innerHTML = showE ? `<div class="card emerg"><h3>🚨 국장님께서 직접 부르셨나요?</h3>
+      <p class="sub">국장님 <b>긴급 호출</b>을 받은 경우에만 누르세요. 순서와 관계없이 바로 '보고 중'으로 표시되고, 대기 중인 분들의 호출은 잠시 멈춥니다(지금 보고 중인 분은 그대로).${mt && L.OPEN.includes(mt.status) ? ` 지금 가진 ${L.pad(mt.no)}번 번호표로 들어갑니다.` : ' 위의 이름·부서를 먼저 입력해 주세요.'}</p>
+      <button class="btn danger block" type="button" data-emerg="1">긴급 호출 받음 · 바로 들어가기</button></div>` : '';
+  }
 }
 
 attachOrgPicker($('#f-dept'));
@@ -224,7 +256,7 @@ $('#apply-form').addEventListener('submit', async e => {
   if (!dept) return (err.textContent = '부서를 입력해 주세요.');
   const btn = $('#f-submit'); btn.disabled = true;
   try {
-    const r = await api.op('issue', { name, dept, topic, refMin: ref });
+    const r = await api.op('issue', { name, dept, topic, refMin: ref, mobile, app: standalone });
     ls.set('bogo-draft', { name, dept });
     $('#f-topic').value = ''; $('#f-ref').value = '';
     toast('번호표를 받았습니다', `${L.pad(r.no)}번 · 선착순`);
@@ -246,10 +278,15 @@ function renderMine(t, q, av, at, s, t0) {
     if (!av.ok) top += `<div class="banner info"><b>${esc(at.text)}</b>${at.sub ? ' · ' + esc(at.sub) : ''}. 예상 시각에 반영되어 있습니다.</div>`;
     if (t.flags?.next) top += `<div class="banner warn"><b>바로 다음 차례입니다.</b> ${esc(s.officeName)} 문 앞에서 기다려 주세요.</div>`;
     else if (t.flags?.soon) top += `<div class="banner warn"><b>곧 차례입니다.</b> ${esc(s.officeName)} 근처로 와 주세요.</div>`;
+  } else if (t.status === 'called' && t.blockedAt) {
+    top = `<div class="callbox"><b>입실 대기 중</b><span>다른 분이 먼저 들어가 계신 것으로 표시했습니다. 자동 취소되지 않고 순서도 그대로입니다.</span><span style="font-size:12.5px">${L.hm(t.blockedAt)}부터 대기 · 국장실이 비면 들어가며 아래 버튼을 눌러 주세요</span></div>`;
+    body = `<button class="btn xl block hot" data-act="start">보고 시작</button>`;
   } else if (t.status === 'called') {
     const left = t.calledAt + s.callLimitMin * L.MIN - t0;
     top = `<div class="callbox"><b>지금 ${esc(s.officeName)}에 들어가 주세요</b><span>들어가면서 아래 버튼을 눌러 주세요</span><span class="num">${mmss(left)}</span><span style="font-size:12.5px">${s.remindEveryMin}분마다 다시 알려 드리고, 남은 시간 안에 누르지 않으면 자동 취소되고 다음 분이 호출됩니다</span></div>`;
-    body = `<button class="btn xl block hot" data-act="start">보고 시작</button>`;
+    body = `<button class="btn xl block hot" data-act="start">보고 시작</button>
+      <button class="btn ghost block two-line" data-act="cantStart"><b>보고 시작 불가(잠시 대기)</b><small>다른 분 보고 중</small></button>
+      <p class="sub" style="text-align:center">누르면 자동 취소가 멈추고 순서가 그대로 유지됩니다. 들어가실 때 '보고 시작'을 눌러 주세요.</p>`;
   } else if (t.status === 'in_progress') {
     const exp = L.expectedMs(t, s), over = t0 - t.startedAt >= exp;
     body = `<div class="stats"><div class="stat"><small>보고 시작</small><b>${L.hm(t.startedAt)}</b></div><div class="stat"><small>경과 / 예상</small><b>${minsAgo(t.startedAt, t0)}<span class="u">분 / ${Math.round(exp / 60000)}분</span></b></div></div>
@@ -257,15 +294,19 @@ function renderMine(t, q, av, at, s, t0) {
       <button class="btn xl block" data-act="complete">보고 완료</button>
       <p class="sub" style="text-align:center">나오면서 눌러 주세요. 다음 분이 바로 호출됩니다. 잘못 눌렀으면 1분 안에 되돌릴 수 있습니다.</p>`;
   } else if (t.status === 'done') {
-    const canUndo = t0 - t.doneAt <= L.MIN;
-    body = `<p class="sub" style="text-align:center">${L.hm(t.doneAt)}에 보고를 마쳤습니다. 수고하셨습니다.</p>
-      ${canUndo ? `<button class="btn ghost block" data-act="undo">잘못 눌렀어요, 되돌리기 (${mmss(t.doneAt + L.MIN - t0)})</button>` : ''}
-      <button class="btn ghost block" data-go="apply">새 번호표 받기</button>`;
+    const open = !t.flags?.final && t0 - t.doneAt <= L.MIN;
+    body = open
+      ? `<p class="sub" style="text-align:center">${L.hm(t.doneAt)}에 '보고 완료'를 눌렀습니다. 다음 분을 호출했습니다.</p>
+        <button class="btn xl block" data-act="finalize">보고 종료</button>
+        <button class="btn ghost block" data-act="undo">잘못 눌렀어요, 되돌리기 (${mmss(t.doneAt + L.MIN - t0)})</button>`
+      : `<p class="sub" style="text-align:center"><b>보고가 종료되었습니다.</b> ${t.startedAt ? `${L.hm(t.startedAt)}~` : ''}${L.hm(t.doneAt)} · 수고하셨습니다.</p>
+        <p class="hint" style="text-align:center">다른 보고가 있으면 아래 '번호표 받기'에서 새로 받으세요.</p>`;
   } else {
     const why = t.status === 'timeout' ? `호출 후 ${s.callLimitMin}분 안에 '보고 시작'이 없어 취소되었습니다. 사정이 있었다면 비서실에 말씀해 주세요. 대기열 맨 뒤로 다시 넣어 드릴 수 있습니다.`
       : t.status === 'expired' ? '오늘 보고 시간이 끝나 마감되었습니다. 내일 다시 받아 주세요.' : '번호표를 취소했습니다.';
     body = `<p class="sub" style="text-align:center">${why}</p><button class="btn ghost block" data-go="apply">새 번호표 받기</button>`;
   }
+  const emergBtn = ['held', 'waiting', 'called'].includes(t.status) ? `<div class="actions" style="justify-content:center"><button class="btn ghost sm danger-outline" data-emerg="1">🚨 국장님 긴급 호출 받음</button></div>` : '';
   const cancelBox = ['held', 'waiting'].includes(t.status)
     ? (S.confirmCancel ? `<div class="actions" style="justify-content:center"><span class="sub" style="align-self:center">정말 취소할까요?</span><button class="btn danger sm" data-act="cancel">취소하기</button><button class="btn ghost sm" data-act="keep">유지</button></div>`
       : `<div class="actions" style="justify-content:center"><button class="btn ghost sm" data-act="askCancel">번호표 취소</button></div>`) : '';
@@ -274,7 +315,7 @@ function renderMine(t, q, av, at, s, t0) {
       <div class="slip-top"><span class="kicker">줄안서 번호표</span><span class="big">${L.pad(t.no)}</span><span class="sub">${esc(t.maskedName)} · ${esc(t.dept)} · ${L.hm(t.createdAt)} 발급${t.refMin ? ` · 예상 ${t.refMin}분` : ''}</span></div>
       <div class="perf"></div>
       <div class="slip-bot"><span class="state ${cls}">${esc(label)}</span>${body}</div>
-    </div>${cancelBox}`;
+    </div>${cancelBox}${emergBtn}`;
   setHTML(el, html);
 }
 function setHTML(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
@@ -291,9 +332,31 @@ document.addEventListener('click', async e => {
     if (act === 'complete') { await api.op('complete', { ticketId: t.id }); toast('보고 완료', '다음 분을 호출했습니다. 수고하셨습니다.'); }
     if (act === 'undo') { await api.op('undo', { ticketId: t.id }); toast('보고 중으로 되돌렸습니다'); }
     if (act === 'cancel') { await api.op('cancel', { ticketId: t.id }); S.confirmCancel = false; toast('번호표를 취소했습니다'); }
+    if (act === 'cantStart') { await api.op('cantStart', { ticketId: t.id }); toast('입실 대기로 표시했습니다', '자동 취소되지 않습니다. 들어가실 때 "보고 시작"을 눌러 주세요.'); }
+    if (act === 'finalize') { await api.op('finalize', { ticketId: t.id }); toast('보고 종료', '수고하셨습니다.'); }
   } catch (err) { showError(err); }
   finally { b.disabled = false; }
 });
+// ---------- 국장님 긴급 호출 ----------
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-emerg]'); if (!b) return;
+  if (!b.dataset.armed) {
+    b.dataset.armed = '1'; const t = b.textContent; b.textContent = '정말 국장님 긴급 호출인가요? 한 번 더 누르면 바로 보고 중'; b.classList.add('danger');
+    setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = t; } }, 5000);
+    return;
+  }
+  const mt = myTicket();
+  const data = mt && L.OPEN.includes(mt.status) ? { ticketId: mt.id } : { name: $('#f-name').value.trim(), dept: $('#f-dept').value.trim(), topic: $('#f-topic').value.trim() };
+  if (!data.ticketId && (!data.name || !data.dept)) { delete b.dataset.armed; $('#f-err').textContent = '긴급 호출도 이름과 부서는 입력해 주세요.'; $('#f-name').focus(); return; }
+  b.disabled = true;
+  try {
+    await api.op('emergency', data);
+    if (data.name) ls.set('bogo-draft', { name: data.name, dept: data.dept });
+    toast('긴급 호출 · 보고 중으로 표시했습니다', '대기 중인 분들의 호출을 잠시 멈췄습니다. 나오면서 "보고 완료"를 눌러 주세요.', 'call');
+    go('mine');
+  } catch (err) { showError(err); b.disabled = false; delete b.dataset.armed; }
+});
+
 // ---------- 현황판 ----------
 function renderBoard(q, av, at, s, t0, mt) {
   const el = $('#board');
@@ -303,7 +366,7 @@ function renderBoard(q, av, at, s, t0, mt) {
       <div class="avail ${at.ok ? '' : 'no'}"><span class="dot"></span><span>${esc(at.text)}${at.sub ? `<small>${esc(at.sub)}</small>` : ''}</span></div>
       ${timelineHTML(s, S.pub.dayDoc, t0, null)}</div>
     <div class="card"><h3>지금</h3>
-      ${q.active.length ? q.active.map(t => `<div class="row"><span class="num" style="font-size:34px;font-weight:600;color:${t.status === 'called' ? 'var(--red)' : 'var(--accent)'}">${L.pad(t.no)}</span><div><b>${t.status === 'called' ? '호출됨 · 입실 대기' : '보고 중'}</b><div class="sub">${esc(t.dept)} · ${t.status === 'called' ? L.hm(t.calledAt) + ' 호출' : L.hm(t.startedAt) + ' 시작'}</div></div></div>`).join('') : '<p class="sub">지금 보고 중인 분이 없습니다.</p>'}
+      ${q.active.length ? q.active.map(t => `<div class="row"><span class="num" style="font-size:34px;font-weight:600;color:${t.status === 'called' ? 'var(--red)' : 'var(--accent)'}">${L.pad(t.no)}</span><div><b>${t.status === 'called' ? (t.blockedAt ? '입실 대기(보고 시작 불가)' : '호출됨 · 입실 대기') : '보고 중'}</b>${t.emergency ? '<span class="tag red">긴급 호출</span>' : ''}<div class="sub">${esc(t.dept)} · ${t.status === 'called' ? L.hm(t.calledAt) + ' 호출' : L.hm(t.startedAt) + ' 시작'}</div></div></div>`).join('') : '<p class="sub">지금 보고 중인 분이 없습니다.</p>'}
     </div>
     <div class="card"><div class="row between"><h3>대기 순서</h3><span class="sub">${q.waiting.length}명</span></div>
       <div class="list">${q.waiting.length ? q.waiting.map(t => `<div class="li ${mt && mt.id === t.id ? 'mine' : ''}"><span class="num no">${L.pad(t.no)}</span><div><div>${esc(t.maskedName)}${mt && mt.id === t.id ? '<span class="tag ok">나</span>' : ''}${t.urgent ? '<span class="tag amber">긴급</span>' : ''}</div><div class="meta">${esc(t.dept)}</div></div><span class="eta">${q.eta[t.id] ? L.hm(q.eta[t.id]) + '경' : '오늘 중 어려움'}</span></div>`).join('') : '<p class="empty">대기 중인 분이 없습니다.</p>'}</div>
