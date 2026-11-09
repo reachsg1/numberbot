@@ -265,3 +265,20 @@ test('엔진: 다음 분 알림 — 시작 즉시 · 종료 전(20분↑ 10분 �
   assert.match(L.noticeText('paused', { no: 2 }, S, r2.notices[0].extra).body, /11:35경 호출 예정/);
   assert.equal(L.tick(t2, S, dayDoc, T('10:31')).notices.length, 0, '한 번만');
 });
+
+test('종일 일정: 출장·휴가는 그날 호출 멈춤, 그 밖에는 표시만', () => {
+  assert.equal(L.allDayInfo({ title: '국장님 서울 출장' }, {}).block, true);
+  assert.equal(L.allDayInfo({ title: '연가' }, {}).block, true);
+  assert.equal(L.allDayInfo({ title: '국정감사 대응 기간' }, {}).block, false);
+  assert.equal(L.allDayInfo({ title: '실국장 만찬' }, {}).block, false);
+  const day = '2026-11-06', S0 = { lunch: false };
+  const on = { allDay: [{ title: '서울 출장', block: true }] };
+  const a = L.availability(S0, on, L.at(day, '10:00'));
+  assert.equal(a.ok, false); assert.equal(L.whyText(a), '종일 일정 · 서울 출장'); assert.equal(a.until, null);
+  assert.equal(L.availability(S0, { allDay: [{ title: '국감 기간', block: false }] }, L.at(day, '10:00')).ok, true);
+  // 재실을 누르면 종일 일정도 무시
+  const p = L.presencePatch('present', '', S0, on, L.at(day, '10:00'));
+  assert.equal(L.availability({ ...S0, presence: p }, on, L.at(day, '10:05')).ok, true);
+  // 공개용: 제목 숨김 설정이면 막힘 여부만
+  assert.deepEqual(L.publicAllDay([{ title: '연가', block: true, why: '연가' }], false), [{ block: true }]);
+});

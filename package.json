@@ -2,9 +2,14 @@
   "name": "numberbot",
   "private": true,
   "type": "module",
-  "description": "보고 대기 번호표 (Vercel + Upstash Redis, 추가 설치 없음)",
-  "engines": { "node": ">=18" },
+  "description": "줄안서: 국장실 보고 대기(Upstash Redis) + 711호 회의실 예약(Neon Postgres) — Vercel",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "node --test tests/logic.test.mjs tests/ical.test.mjs tests/webpush.test.mjs tests/server.test.mjs"
+    "test": "node --test tests/logic.test.mjs tests/ical.test.mjs tests/webpush.test.mjs tests/server.test.mjs tests/rooms.test.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
   }
 }

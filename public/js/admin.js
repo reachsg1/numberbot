@@ -154,8 +154,8 @@ function render() {
   const dd = P.dayDoc || {};
   setHTML($('#sched'), `<div class="row between"><h2>오늘 국장님 일정</h2><button class="btn ghost sm" data-op="syncCalendar">지금 다시 읽기</button></div>
     <div class="avail ${at.ok ? '' : 'no'}"><span class="dot"></span><span>${esc(at.ok ? '지금 보고 가능' : at.text)}${at.sub ? `<small>${esc(at.sub)}</small>` : ''}</span></div>
-    ${timelineHTML(s, dd, t0, dp.busy || null, { admin: true })}
-    ${(dp.allDay || []).length ? `<p class="sub">종일 일정(시간 미정 · 호출을 막지 않음): ${dp.allDay.map(esc).join(' / ')}</p>` : ''}
+    ${timelineHTML(s, dd, t0, dp.busy || null, { admin: true, allDay: dp.allDay || [] })}
+    ${(dp.allDay || []).length ? `<p class="hint">종일 일정은 <b>대외 일정(출장 등)</b>이거나 설정의 '종일 호출 중지 낱말'(휴가·연가 등)이 있으면 그날 하루 호출을 멈추고, 그 밖에는 표시만 합니다. 국장님이 계시면 '재실'을 누르세요.</p>` : ''}
     <p class="hint">${dd.calendarError ? `<span class="tag red">연동 문제</span> ${esc(dd.calendarError)}` : dd.syncedAt ? `${S.adm.settings?.icalUrl ? '비밀 주소(iCal)' : esc(s.calendarId) + ' 공개 주소'} · ${L.hm(dd.syncedAt)} 확인 · 5분마다 자동` : '아직 캘린더를 읽지 않았습니다.'} · 일정이 끝나고 ${s.resumeBufferMin}분 뒤부터 호출합니다.</p>`);
 
   // 접수 안내 QR
@@ -183,7 +183,7 @@ function fillSettings() {
   const s = { ...S.pub.settings, ...(S.adm.settings || {}) };
   $('#s-icalUrl').value = s.icalUrl || '';
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'prepMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) $('#s-' + k).value = s[k];
-  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'places']) $('#s-' + k).value = String(s[k] || '').split(',').map(x => x.trim()).join(', ');
+  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'allDayOffKeywords', 'places']) $('#s-' + k).value = String(s[k] || '').split(',').map(x => x.trim()).join(', ');
   for (const k of ['lunch', 'requirePush', 'requireInstall', 'showEventTitles']) $('#s-' + k).checked = s[k] !== false;
   S.settingsFilled = true;
 }
@@ -232,7 +232,7 @@ $('#set-form').addEventListener('submit', async e => {
   const values = {};
   for (const k of ['officeName', 'calendarId', 'workStart', 'workEnd', 'icalUrl']) values[k] = $('#s-' + k).value.trim();
   for (const k of ['callLimitMin', 'remindEveryMin', 'overdueEveryMin', 'soonAhead', 'soonMin', 'resumeBufferMin', 'prepMin', 'returnMin', 'returnKmPerHour', 'defaultMin']) values[k] = Number($('#s-' + k).value);
-  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'places']) values[k] = $('#s-' + k).value;
+  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'allDayOffKeywords', 'places']) values[k] = $('#s-' + k).value;
   for (const k of ['lunch', 'requirePush', 'requireInstall', 'showEventTitles']) values[k] = $('#s-' + k).checked;
   const code = $('#s-accessCode').value.trim();
   try {

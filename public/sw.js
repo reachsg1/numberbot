@@ -1,5 +1,5 @@
 // 서비스 워커: 앱 설치(홈 화면) + 화면이 꺼져 있어도 푸시 알림 표시 (표준 웹 푸시, 외부 서비스 없음)
-const CACHE = 'bogo-v16';
+const CACHE = 'bogo-v20';
 const SHELL = ['/', '/index.html', '/css/app.css', '/js/app.js', '/js/ui.js', '/js/logic.js', '/js/config.js', '/js/api-server.js', '/js/orgs.js', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
@@ -36,7 +36,11 @@ self.addEventListener('notificationclick', e => {
   e.notification.close();
   const url = e.notification.data?.url || '/#mine';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-    for (const c of list) if (c.url.startsWith(self.location.origin) && 'focus' in c) return c.focus();
+    // 이미 열린 화면이 있으면 그 화면을 알림 대상(내 번호표)으로 옮긴 뒤 앞으로 가져옴(첫 화면·회의실 화면에 있어도)
+    for (const c of list) if (c.url.startsWith(self.location.origin) && 'focus' in c) {
+      if ('navigate' in c && new URL(c.url).hash !== new URL(url, self.location.origin).hash) c.navigate(url).catch(() => {});
+      return c.focus();
+    }
     return self.clients.openWindow(url);
   }));
 });

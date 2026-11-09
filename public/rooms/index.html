@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>연구정책국 회의실 예약</title>
+  <link rel="icon" type="image/png" href="/rooms/img/favicon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#1E5C48" />
+  <link rel="apple-touch-icon" href="/rooms/img/apple-touch-icon.png" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link rel="stylesheet" href="/rooms/style.css?v=20261106-2" />
+</head>
+<body>
+  <!-- 예약 화면 -->
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <a class="back-home" href="/?home=1" title="줄안서 첫 화면으로">‹ 처음으로</a>
+        <a class="brand-ci" href="/rooms/" id="homeLink" title="오늘 날짜로">
+          <img src="/rooms/img/rda-emblem.png" alt="" width="58" height="56" />
+          <span id="orgName">농촌진흥청 연구정책국</span>
+        </a>
+        <h1 id="roomName">711호 회의실</h1>
+      </div>
+      <div class="now" id="nowStatus" aria-live="polite"></div>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="book" aria-selected="true">예약하기</button>
+        <button role="tab" data-tab="mine" aria-selected="false">내 예약</button>
+        <button role="tab" data-tab="admin" aria-selected="false">관리자</button>
+        <a class="tab-link" href="?view=board" target="_blank" rel="noopener">현황판 열기</a>
+      </nav>
+    </header>
+
+    <main>
+      <section id="tab-book" class="tab-panel">
+        <div class="book-layout">
+          <aside class="panel cal-panel">
+            <div class="cal-head">
+              <button class="icon-btn" id="prevMonth" aria-label="이전 달">‹</button>
+              <h2 id="monthLabel"></h2>
+              <button class="icon-btn" id="nextMonth" aria-label="다음 달">›</button>
+              <button class="text-btn" id="todayBtn">오늘</button>
+            </div>
+            <div class="cal-week"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+            <div class="cal-grid" id="calGrid"></div>
+            <p class="cal-hint">날짜 아래 띠는 그날 예약이 찬 시간대입니다.</p>
+          </aside>
+
+          <aside class="panel info-panel" aria-labelledby="infoTitle">
+            <h2 id="infoTitle">회의실 안내</h2>
+            <button class="room-photo" id="roomPhotoBtn" aria-label="회의실 사진 크게 보기">
+              <img id="roomPhoto" src="/rooms/img/room-thumb.jpg" alt="711호 회의실 전경" width="720" height="540" loading="lazy" />
+              <span>크게 보기</span>
+            </button>
+            <h3>이용 안내</h3>
+            <ul class="notices" id="notices"></ul>
+            <h3>예약 규칙</h3>
+            <ul class="rules" id="rules"></ul>
+            <p class="ver">화면 버전 20261103-4</p>
+          </aside>
+
+          <section class="panel board-panel">
+            <div class="board-head">
+              <div>
+                <h2 id="dayLabel"></h2>
+                <p class="muted" id="daySummary"></p>
+              </div>
+              <div class="dept-legend" id="deptLegend"></div>
+            </div>
+            <p class="board-hint" id="boardHint">빈 칸을 눌러 시작 시간을, 한 번 더 눌러 끝 시간을 고르세요. 끌어서 고를 수도 있습니다.</p>
+            <div class="timeline" id="timeline"></div>
+          </section>
+
+          <section class="panel form-panel" id="formPanel">
+            <h2>예약 신청</h2>
+            <div class="sel-summary" id="selSummary">시간을 고르면 여기에 표시됩니다.</div>
+            <form id="bookForm" novalidate autocomplete="on">
+              <div class="row-3">
+                <label>날짜<input type="date" name="date" required /></label>
+                <label>시작<select name="start" required></select></label>
+                <label>종료<select name="end" required></select></label>
+              </div>
+              <label><span>회의명 <em>*</em></span><input name="title" maxlength="100" required placeholder="예: 2027년 업무계획 검토 회의" /></label>
+              <div class="row-2">
+                <label><span>신청자 <em>*</em></span><input name="applicant" maxlength="30" required autocomplete="name" /></label>
+                <label>부서<select name="dept"></select></label>
+              </div>
+              <label class="dept-other" hidden>부서명<input name="deptOther" maxlength="40" /></label>
+              <div class="row-2">
+                <label>내선번호<input name="phone" maxlength="30" inputmode="tel" placeholder="예: 1234" /></label>
+                <label>참석 인원<input name="attendees" type="number" min="1" max="999" inputmode="numeric" /></label>
+              </div>
+              <label>메모<textarea name="note" rows="2" maxlength="500" placeholder="외부 참석자, 노트북·화상회의 장비 필요 여부 등"></textarea></label>
+              <div class="row-2">
+                <label><span>비밀번호 4자리 <em>*</em></span><input name="pin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" required autocomplete="off" /></label>
+                <label>반복<select name="repeatWeeks"></select></label>
+              </div>
+              <p class="help">비밀번호는 예약을 수정하거나 취소할 때 씁니다.</p>
+              <button type="submit" class="primary" id="submitBtn">예약하기</button>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <section id="tab-mine" class="tab-panel" hidden>
+        <div class="panel narrow">
+          <h2>내 예약</h2>
+          <p class="muted">신청할 때 적은 이름으로 앞으로 예정된 예약을 찾습니다.</p>
+          <form id="mineForm" class="inline-form">
+            <input name="name" placeholder="신청자 이름" maxlength="30" required />
+            <button class="primary">찾기</button>
+          </form>
+          <div id="mineList" class="list"></div>
+        </div>
+      </section>
+
+      <section id="tab-admin" class="tab-panel" hidden>
+        <div id="adminLogin" class="panel narrow">
+          <h2>관리자 로그인</h2>
+          <p class="muted">예약 순서 조정, 대리 등록, 예약 불가 시간 설정, 이력 조회를 할 수 있습니다.</p>
+          <form id="loginForm" class="stack">
+            <label>관리자 비밀번호<input name="password" type="password" required autocomplete="current-password" /></label>
+            <label>이름 (변경 이력에 남습니다)<input name="name" maxlength="20" /></label>
+            <button class="primary">로그인</button>
+          </form>
+        </div>
+
+        <div id="adminArea" hidden>
+          <div class="admin-bar">
+            <div class="subtabs" role="tablist">
+              <button data-sub="manage" aria-selected="true">예약 관리</button>
+              <button data-sub="create" aria-selected="false">대리 등록·예약 불가</button>
+              <button data-sub="logs" aria-selected="false">변경 이력</button>
+              <button data-sub="stats" aria-selected="false">이용 통계</button>
+            </div>
+            <span class="muted" id="adminWho"></span>
+            <button class="text-btn" id="logoutBtn">로그아웃</button>
+          </div>
+
+          <div class="panel sub" data-sub-panel="manage">
+            <form id="filterForm" class="filters">
+              <label>시작일<input type="date" name="from" /></label>
+              <label>종료일<input type="date" name="to" /></label>
+              <label>상태<select name="status"><option value="active">예약</option><option value="cancelled">취소</option><option value="">전체</option></select></label>
+              <label class="grow">검색<input name="q" placeholder="회의명, 신청자, 부서" /></label>
+              <button class="secondary">조회</button>
+            </form>
+            <div class="table-actions">
+              <button class="secondary" id="swapBtn" disabled>선택한 2건 순서 바꾸기</button>
+              <span class="muted" id="swapHint">같은 날 예약 2건을 체크하면 시간대를 맞바꿉니다. 각 회의 길이는 그대로입니다.</span>
+              <button class="secondary" id="exportBtn">엑셀(CSV) 내려받기</button>
+            </div>
+            <div class="table-wrap"><table class="data" id="adminTable"></table></div>
+          </div>
+
+          <div class="panel sub" data-sub-panel="create" hidden>
+            <form id="adminCreateForm" class="stack admin-create">
+              <fieldset class="seg">
+                <label><input type="radio" name="kind" value="meeting" checked /> 회의 대리 등록</label>
+                <label><input type="radio" name="kind" value="block" /> 예약 불가 시간</label>
+              </fieldset>
+              <div class="row-3">
+                <label>날짜<input type="date" name="date" required /></label>
+                <label>시작<select name="start"></select></label>
+                <label>종료<select name="end"></select></label>
+              </div>
+              <label class="check"><input type="checkbox" name="allDay" /> 하루 종일</label>
+              <label>제목<input name="title" maxlength="100" placeholder="회의명 또는 사유(예: 시설 점검, 국장 주재 회의)" /></label>
+              <div class="row-3 meeting-only">
+                <label>신청자<input name="applicant" maxlength="30" /></label>
+                <label>부서<select name="dept"></select></label>
+                <label>내선번호<input name="phone" maxlength="30" /></label>
+              </div>
+              <div class="row-3">
+                <label>반복<select name="repeatWeeks"></select></label>
+                <label class="meeting-only">참석 인원<input name="attendees" type="number" min="1" max="999" /></label>
+                <label class="meeting-only">비밀번호(선택)<input name="pin" maxlength="4" inputmode="numeric" placeholder="신청자가 직접 수정할 때" /></label>
+              </div>
+              <label>메모<textarea name="note" rows="2" maxlength="500"></textarea></label>
+              <p class="help">관리자 등록은 이용 시간·기간 제한을 받지 않습니다. 겹치는 예약이 있으면 해당 예약을 먼저 옮기거나 취소해 주세요.</p>
+              <button class="primary">등록하기</button>
+            </form>
+          </div>
+
+          <div class="panel sub" data-sub-panel="logs" hidden>
+            <div class="table-wrap"><table class="data" id="logTable"></table></div>
+            <button class="secondary" id="moreLogs">더 보기</button>
+          </div>
+
+          <div class="panel sub" data-sub-panel="stats" hidden>
+            <form id="statsForm" class="filters">
+              <label>월<input type="month" name="month" /></label>
+              <button class="secondary">보기</button>
+            </form>
+            <div id="statsBody"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 회의실 앞 현황판(?view=board) -->
+  <div id="board" hidden>
+    <div class="bd-top">
+      <div>
+        <div class="bd-org" id="bdOrg"></div>
+        <div class="bd-room" id="bdRoom"></div>
+      </div>
+      <div class="bd-clock"><div id="bdTime"></div><div id="bdDate"></div></div>
+    </div>
+    <div class="bd-status-wrap">
+      <div class="bd-status" id="bdStatus"></div>
+      <div class="bd-help"><img src="/rooms/img/mascot.png" alt="" width="150" height="161" /><span>자리에서 바로 예약하세요</span><b id="bdFoot"></b></div>
+    </div>
+    <h3 class="bd-sub">오늘 일정</h3>
+    <ol class="bd-list" id="bdList"></ol>
+  </div>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="icon-btn modal-x" data-close aria-label="닫기">×</button>
+      <h2 id="modalTitle"></h2>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+  <button class="mobile-go" id="mobileGo" hidden></button>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/rooms/app.js?v=20261106-2"></script>
+</body>
+</html>
