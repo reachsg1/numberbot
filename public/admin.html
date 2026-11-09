@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>줄안서 관리</title>
-<meta name="theme-color" content="#F2F4F6">
+<meta name="theme-color" content="#1E5C48">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icons/icon-192.png?v=5">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=5">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="/css/app.css?v=20261106t">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/css/app.css">
 <script src="/js/config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" defer></script>
 </head>
@@ -83,7 +85,6 @@
             <div class="field"><label for="s-extKeywords">지역은 없지만 대외 일정으로 볼 낱말 (쉼표로 구분)</label><textarea id="s-extKeywords" rows="2"></textarea></div>
             <div class="field"><label for="s-localKeywords">전주(내부)로 볼 장소 낱말 — 장소에 이 낱말이 있으면 대외로 보지 않음</label><textarea id="s-localKeywords" rows="2"></textarea></div>
             <p class="hint">캘린더 일정의 장소·제목·설명으로 판단합니다. 제목에 <b>[대외]</b> 또는 <b>[내부]</b>를 붙이면 그대로 따르고, "오늘 국장님 일정"에서 일정별로 바꿀 수도 있습니다.</p>
-            <div class="field"><label for="s-allDayOffKeywords">종일 일정 중 하루 호출을 멈출 낱말 (쉼표로 구분) — 대외 일정(출장 등)은 낱말이 없어도 멈춤</label><textarea id="s-allDayOffKeywords" rows="2"></textarea></div>
             <div class="field"><label for="s-prepKeywords">회의 준비가 필요한 일정 낱말 — 제목·장소·설명 어디든 있으면 시작 전 위 시간 동안 호출하지 않음 (쉼표로 구분)</label><textarea id="s-prepKeywords" rows="2"></textarea></div>
             <label class="check"><input type="checkbox" id="s-lunch"><span>점심시간(12:00~13:00)에는 호출하지 않음</span></label>
             <label class="check"><input type="checkbox" id="s-requirePush"><span>알림 테스트를 통과해야 번호표 발급</span></label>

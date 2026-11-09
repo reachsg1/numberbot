@@ -9,15 +9,12 @@ export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;'
 export async function loadApi() {
   const cfg = self.BOGO_CONFIG || {};
   let note = '서버 없이 이 브라우저에서만 동작';
-  let server = false; // /api/state 가 답했으면 서버(회의실 API 포함)는 있는 것
   if (!cfg.demo && /^https?:$/.test(location.protocol)) {
     try {
       const r = await fetch((cfg.apiBase || '') + '/api/state');
       const j = await r.json().catch(() => null);
-      if (j) server = true;
       if (j && j.configured) return (await import('./api-server.js')).create(cfg, j);
-      if (j && j.configured === false) note = '저장소(Redis) 연결 전이라 이 브라우저에서만 동작'
-        + (j.redisEnvNames ? (j.redisEnvNames.length ? ` (찾은 이름: ${j.redisEnvNames.join(', ')})` : ' (Redis 환경변수가 하나도 없음 → Storage 연결 후 Redeploy)') : '');
+      if (j && j.configured === false) note = '저장소(Upstash Redis) 연결 전이라 이 브라우저에서만 동작';
       else if (j && j.error) {
         // 서버는 있는데 잠깐 오류: 데모로 빠지지 않고 실제 운영 화면에서 오류를 보여 줍니다.
         return (await import('./api-server.js')).create(cfg, null);
@@ -26,7 +23,6 @@ export async function loadApi() {
   }
   const api = (await import('./api-demo.js')).create();
   api.demoNote = note;
-  api.noServer = !server; // 미리보기(서버 없음)일 때만 회의실 메뉴를 막음
   return api;
 }
 
@@ -91,10 +87,6 @@ export function timelineHTML(s, dayDoc, now, titled, opts = {}) {
   const dur = m => (m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ' ' + (m % 60) + '분' : ''}` : `${m}분`);
   const where = b => (titled && b.ext ? `<small class="ret">${b.place ? esc(b.place) + (b.km ? ` ${b.km}km` : '') + ' · ' : '거리 모름 · '}이동 ${dur(L.retMinOf(b, c.s))}</small>` : '');
   const list = titled || (dayDoc.busy || []).map(b => ({ ...b, title: b.title || (b.ext ? '대외 일정' : '일정 있음') }));
-  // 종일 일정: 관리 화면은 opts.allDay(제목 포함), 신청자 화면은 dayDoc.allDay
-  const allDay = opts.allDay || dayDoc.allDay || [];
-  const adRow = a => (typeof a === 'string' ? { title: a } : a);
-  const allDayRows = allDay.map(adRow).map(a => `<div class="allday"><span class="num">종일</span><span>${esc(a.title || '일정 있음')}${a.block ? `<span class="tag red">하루 종일 호출 안 함${a.why ? ' · ' + esc(a.why) : ''}</span>` : '<small class="ret" style="color:var(--muted)">표시만 · 호출에는 영향 없음</small>'}</span></div>`).join('');
   const row = b => `<div><span class="num">${L.hm(b.s)}~${L.hm(b.e)}</span><span>${esc(b.title)}${b.pre && c.s.prepMin > 0 ? `<small class="ret prep">${L.hm(b.s - c.s.prepMin * L.MIN)}부터 회의 준비</small>` : ''}${b.ext ? `${titled || b.title ? '<span class="tag amber">대외</span>' : ''}<small class="ret">${ret(b)}</small>${where(b)}` : ''}${opts.admin && b.key ? ` <button type="button" class="linkbtn" data-ext-key="${esc(b.key)}" data-ext-to="${b.ext ? 0 : 1}">${b.ext ? '내부 일정으로' : '대외 일정으로'}</button>` : ''}</span></div>`;
   // 약 2시간 간격 눈금: 시작 시각부터 2시간마다 + 끝 시각
   const ticks = [];
@@ -108,7 +100,7 @@ export function timelineHTML(s, dayDoc, now, titled, opts = {}) {
     <div class="tl-ticks num" aria-hidden="true">${labels}</div>
     ${tags ? `<div class="tl-tags" aria-hidden="true">${tags}</div>` : ''}
     <div class="tl-key"><span><i class="k-ok"></i>보고 가능</span><span><i class="k-busy"></i>일정</span>${c.bl.some(b => b.ext) ? '<span><i class="k-ext"></i>대외 일정</span><span><i class="k-ret"></i>복귀 이동</span>' : ''}${c.bl.some(b => b.pre) ? '<span><i class="k-prep"></i>회의 준비</span>' : ''}${c.s.lunch ? '<span><i class="k-lunch"></i>점심</span>' : ''}</div>
-    ${list.length || allDayRows ? `<div class="evs">${allDayRows}${list.map(row).join('')}</div>` : '<p class="sub">오늘 국장님 캘린더에 일정이 없습니다.</p>'}`;
+    ${list.length ? `<div class="evs">${list.map(row).join('')}</div>` : '<p class="sub">오늘 국장님 캘린더에 시간이 정해진 일정이 없습니다.</p>'}`;
 }
 
 // ---------- 부서 고르기: 두세 글자 입력하면 자동완성 + 목록(기관 > 국·부 > 과)에서 고르기 ----------

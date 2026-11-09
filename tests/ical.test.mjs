@@ -30,7 +30,7 @@ const brief = r => r.busy.map(b => `${hm(b.s)}-${hm(b.e)} ${b.title}`);
 test('9/30: 시간 일정 2개(한가함 표시 포함), 종일 1개, 취소 제외', () => {
   const r = eventsForDay(ICS, '2026-09-30');
   assert.deepEqual(brief(r), ['09:00-11:30 (국) 기관장협의회 *농과원 생물부 5층', '15:00-17:00 (국) RDA 인사이트데이 *오디토리움']);
-  assert.deepEqual(r.allDay.map(a => a.title), ['실국장 만찬']);
+  assert.deepEqual(r.allDay, ['실국장 만찬']);
 });
 test('매주 반복 · 제외 날짜 · 한 회차 변경', () => {
   assert.deepEqual(brief(eventsForDay(ICS, '2026-10-02')), ['09:00-10:00 (국&과) 주간업무점검회의']);

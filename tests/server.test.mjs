@@ -126,7 +126,6 @@ test('하루 흐름: 자동 호출 → 시작·완료 → 다음 호출·문 앞
   assert.deepEqual(day().busy.map(b => L.hm(b.s) + '-' + L.hm(b.e) + (b.ext ? ' 대외' : '')), ['10:30-11:30', '14:00-15:00 대외']);
   assert.deepEqual(day().busy.map(b => !!b.pre), [true, false], '설명에 2회의실 → 회의 준비');
   assert.equal(day().allDayCount, 1);
-  assert.deepEqual(day().allDay, [{ title: '실국장 만찬', loc: '', block: false, why: '' }], '종일 일정도 읽음(만찬은 표시만)');
 
   // 남의 번호표는 못 누름
   await assert.rejects(op('b', { op: 'start', ticketId: r1.id }), { code: 'permission-denied' });

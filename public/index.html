@@ -3,36 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>줄안서 · 연구정책국 업무 도우미</title>
-<meta name="theme-color" content="#F2F4F6">
-<meta name="description" content="국장실 보고 대기와 회의실 예약을 한 곳에서.">
+<title>줄안서 · 국장실 보고 대기</title>
+<meta name="theme-color" content="#1E5C48">
+<meta name="description" content="줄 안 서고, 국장실 보고 차례를 휴대폰 알림으로 받습니다.">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icons/icon-192.png?v=5">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="줄안서">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="/css/app.css?v=20261106t">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/css/app.css">
 <script src="/js/config.js"></script>
 </head>
 <body>
 <div class="wrap">
-  <!-- 첫 화면: 보고 대기 / 회의실 예약 고르기 -->
-  <section id="launcher" class="launcher" hidden>
-    <p class="l-date" id="l-date"></p>
-    <h1 class="l-title">무엇을 하시겠어요?</h1>
-    <button type="button" class="l-btn" id="l-queue">
-      <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M14 5v12" stroke-dasharray="2 2.2"/></svg></i>
-      <span><b>국장실 보고 대기</b><small id="l-queue-sub">번호표 받고 자리에서 기다리기</small></span><em aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></em></button>
-    <a class="l-btn" id="l-rooms" href="/rooms/">
-      <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/><path d="M9 14h2M13 14h2M9 17h2"/></svg></i>
-      <span><b>회의실 예약</b><small id="l-rooms-sub">711호 · 빈 시간 보고 바로 예약</small></span><em aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></em></a>
-    <div class="ci"><img src="/img/ci-emblem.png" alt="" width="30" height="29"><span class="org">농촌진흥청</span><span class="sep" aria-hidden="true"></span><span class="dept">연구정책국</span></div>
-  </section>
-
-  <header class="top" id="q-top">
-    <a class="back" href="/?home=1" aria-label="처음 화면으로"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></a>
+  <header class="top">
     <div class="brand"><small id="h-date">보고 대기</small><b id="h-office">국장실 보고 대기</b></div>
     <span class="pill ok" id="h-state"><i></i>불러오는 중</span>
   </header>
@@ -55,7 +43,7 @@
     <div class="card" id="apply-summary"></div>
     <div class="card">
       <form id="apply-form" novalidate>
-        <h2 class="h-big">번호표 받기</h2>
+        <h2>번호표 받기</h2>
         <div class="field"><label for="f-name">이름</label><input type="text" id="f-name" autocomplete="name" placeholder="홍길동" maxlength="20"></div>
         <div class="field"><label for="f-dept">부서</label><input type="text" id="f-dept" placeholder="두세 글자 입력 (예: 연구정, 농과원 토양)" maxlength="40">
           <span class="hint">입력하면 아래에 부서가 나옵니다. <button type="button" class="linkbtn" id="f-dept-browse" aria-expanded="false">목록에서 고르기</button></span>
@@ -63,8 +51,7 @@
         </div>
         <div class="field"><label for="f-topic">보고 건명 <span class="hint">(선택)</span></label><input type="text" id="f-topic" placeholder="국정감사 예상질의 답변자료" maxlength="60"><span class="hint">비서실에만 보이고 현황판에는 나오지 않습니다.</span></div>
         <div class="field"><label for="f-ref">예상 소요 시간 <span class="hint">(선택 · 참고용)</span></label>
-          <div class="refchips" id="f-ref-chips"><button type="button" data-ref="5">5분</button><button type="button" data-ref="10">10분</button><button type="button" data-ref="20">20분</button><button type="button" data-ref="30">30분</button></div>
-          <div class="inline-unit"><input type="number" id="f-ref" inputmode="numeric" min="1" max="180" step="1" placeholder="직접 입력"><span>분</span></div>
+          <div class="inline-unit"><input type="number" id="f-ref" inputmode="numeric" min="1" max="180" step="1" placeholder="예: 10"><span>분</span></div>
           <span class="hint">순서는 신청 순으로 정해지고, 소요 시간은 비서실 참고용입니다.</span>
         </div>
         <p class="err-msg" id="f-err" role="alert"></p>

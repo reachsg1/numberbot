@@ -1,4 +1,4 @@
-# 줄안서 — 국장실 보고 대기 + 711호 회의실 예약 (Vercel)
+# 줄안서 — 국장실 보고 대기 번호표 (Vercel만 사용)
 
 국장님 보고 대기 번호를 휴대폰으로 받고, 차례가 오면 푸시 알림을 받는 설치형 웹앱입니다.
 **Firebase가 필요 없습니다.** GitHub, Vercel, 그리고 Vercel 화면에서 붙이는 무료 저장소(Upstash Redis)만 씁니다.
@@ -10,10 +10,6 @@
 | Upstash Redis | 번호표와 설정 저장. Vercel → Storage에서 연결 | 무료 (월 50만 명령, 256MB, 카드 필요 없음) |
 | 웹 푸시 | 휴대폰 알림. 브라우저 기본 기능이라 별도 서비스 없음 | 무료 |
 | 구글 캘린더 | iCal 주소로 국장님 일정 읽기 | 무료 |
-| Neon Postgres | 회의실 예약·변경 이력 저장 (원래 회의실 앱이 쓰던 것 그대로 연결) | 무료 |
-
-앱을 열면 첫 화면에서 **국장실 보고 대기**와 **회의실 예약**(`/rooms/`) 중 하나를 고릅니다.
-알림을 누르거나 국장실 앞 QR(`?code=…`)로 들어오면 보고 대기로, 회의실 앞 태블릿(`/rooms/?view=board`)은 현황판으로 바로 열립니다.
 
 ---
 
@@ -39,7 +35,6 @@
 2. **Create Database** (또는 Marketplace) → **Upstash** → **Upstash for Redis**를 고릅니다.
 3. 요금제는 **Free**, 지역은 **Tokyo(ap-northeast-1)**처럼 가까운 곳을 고른 뒤 만듭니다.
 4. 이 프로젝트에 **Connect**합니다. 환경 변수 `KV_REST_API_URL`과 `KV_REST_API_TOKEN`이 자동으로 들어갑니다.
-   - 무료 Upstash를 이미 다른 프로젝트에서 쓰고 있다면, Storage에서 **Redis**(Redis Cloud, Free 30MB)를 붙여도 됩니다. 이때 들어오는 `REDIS_URL`을 줄안서가 자동으로 알아봅니다.
 
 ## 3. 관리자 비밀번호 정하기 (환경 변수)
 
@@ -86,26 +81,6 @@ Vercel → 프로젝트 → **Settings → Environment Variables**에서 아래 
 - 확인: 작업의 History에서 상태가 `200 OK`면 정상
 
 (Vercel 무료 요금제의 자체 예약은 하루 1번뿐이라 새벽 정리용으로만 씁니다.)
-
----
-
-## 6. 회의실 예약 합치기 (처음 한 번)
-
-회의실 예약 화면과 서버 코드는 원래 회의실 앱(meetingroom-smoky-three)을 그대로 옮겼습니다(`public/rooms/`, `lib/rooms/`, `api/room-*.js`).
-데이터는 원래 쓰던 **Neon 데이터베이스를 그대로 연결**하므로 기존 예약과 이력이 유지됩니다.
-
-1. **Neon 연결**: Vercel → 줄안서 프로젝트 → **Storage** → 기존 Neon 데이터베이스 선택 → **Connect Project**(줄안서 프로젝트). `DATABASE_URL`이 자동으로 들어갑니다.
-2. **환경 변수 추가** (Settings → Environment Variables)
-
-| 이름 | 넣을 값 | 비고 |
-|---|---|---|
-| `ROOM_ADMIN_PASSWORD` | 회의실 관리자 비밀번호 | 비서실의 `ADMIN_PASSWORD`와 따로 |
-| `ROOM_APP_SECRET` | 예전 회의실 프로젝트의 `APP_SECRET` 값. **없었다면 예전 회의실 `ADMIN_PASSWORD` 값** | 기존 예약 비밀번호(4자리)가 그대로 맞으려면 반드시 같은 값 |
-| `ROOM_ACCESS_CODE` | 회의실 접속 코드. 줄안서 접수 코드와 같게(예: 1234) 두면 한 번만 입력 | 비워 두면 코드 없이 열림 |
-| (선택) `ROOM_NAME`, `ROOM_LOCATION`, `ROOM_CAPACITY`, `ROOM_NOTICES`, `OPEN_TIME`, `CLOSE_TIME`, `DEPTS`, `HOLIDAYS` 등 | 예전 회의실 프로젝트에 넣어 둔 값이 있으면 그대로 | 이름은 예전과 같음 |
-
-3. 이 저장소 전체를 GitHub에 올리고 Vercel이 다시 배포되면 `https://numberbot-six.vercel.app/rooms/`에서 회의실 예약이 열리는지 확인합니다.
-4. 확인되면 **예전 회의실 저장소**를 '주소 넘김' 파일(vercel.json, public/index.html, README.md)로 바꿔 올립니다. 예전 주소로 들어오면 새 주소로 넘어가고, 현황판은 새 현황판으로 넘어갑니다.
 
 ---
 

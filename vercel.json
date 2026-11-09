@@ -2,73 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "outputDirectory": "public",
-  "regions": [
-    "icn1"
-  ],
+  "regions": ["icn1"],
   "functions": {
-    "api/*.js": {
-      "maxDuration": 20,
-      "includeFiles": "public/js/logic.js"
-    }
+    "api/*.js": { "maxDuration": 20, "includeFiles": "public/js/logic.js" }
   },
-  "crons": [
-    {
-      "path": "/api/tick",
-      "schedule": "30 16 * * *"
-    }
-  ],
+  "crons": [{ "path": "/api/tick", "schedule": "30 16 * * *" }],
   "headers": [
-    {
-      "source": "/rooms/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, must-revalidate"
-        },
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        },
-        {
-          "key": "Referrer-Policy",
-          "value": "same-origin"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        }
-      ]
-    },
-    {
-      "source": "/api/room-(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
-    },
-    {
-      "source": "/sw.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache"
-        },
-        {
-          "key": "Service-Worker-Allowed",
-          "value": "/"
-        }
-      ]
-    },
-    {
-      "source": "/(.*)\\.(js|css|html|webmanifest)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache"
-        }
-      ]
-    }
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }, { "key": "Service-Worker-Allowed", "value": "/" }] },
+    { "source": "/(.*)\\.(js|css|html|webmanifest)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
   ]
 }

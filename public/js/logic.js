@@ -44,8 +44,6 @@ export const DEFAULTS = {
   prepMin: 30,
   requirePush: true,     // 알림 테스트를 통과해야 번호표 발급
   requireInstall: true,  // 휴대폰은 홈 화면에 설치한 앱에서만 번호표 발급
-  // 종일 일정 중 이 낱말이 있거나 대외 일정(출장 등)이면 그날은 호출하지 않음. 그 밖의 종일 일정은 표시만
-  allDayOffKeywords: '휴가,연가,병가,공가,휴무,연수,파견',
   showEventTitles: true, // 신청자 화면(대기 현황)에도 국장님 일정 제목 표시
   defaultMin: 10,        // 보고 기록이 없을 때 쓰는 1인 보고 시간
   avgMs: 0,              // 실제 보고 시간 평균(서버가 갱신)
@@ -100,10 +98,6 @@ export function blocks(s, dayDoc, day, now) {
     const pre = b.pre ? s.prepMin : 0;
     list.push({ s: b.s - pre * MIN, e: b.e + (b.ext ? retMinOf(b, s) : s.resumeBufferMin) * MIN, kind: 'busy', ext: !!b.ext, pre: pre > 0, raw: b });
   }
-  // 종일 일정: 출장·휴가 등(block)이면 그날 보고 시간 전체를 막음
-  for (const a of (dayDoc && dayDoc.allDay) || []) {
-    if (a && a.block) list.push({ s: at(day, s.workStart), e: at(day, s.workEnd), kind: 'busy', allDay: true, raw: { s: at(day, s.workStart), e: at(day, s.workEnd), title: a.title || '' } });
-  }
   const pm = presenceMode(s, now);
   if (pm === 'present') {
     const until = s.presence.until || now;
@@ -154,7 +148,6 @@ export function whyText(av) {
   if (k === 'closed') return '오늘 보고 마감';
   if (k === 'lunch') return '점심시간';
   if (k === 'absent') return '국장님 부재';
-  if (k === 'busy' && av.block.allDay) return `종일 일정${av.block.raw && av.block.raw.title ? ' · ' + av.block.raw.title : ''}`;
   if (k === 'busy' && av.block.pre && av.block.raw && av.now < av.block.raw.s) return `회의 준비 · ${hm(av.block.raw.s)} 회의`;
   if (k === 'busy' && av.block.ext) return av.until == null ? '대외 일정 · 오늘 복귀 어려움' : `대외 일정 · ${hm(av.block.e)}경 복귀`;
   if (k === 'busy') return `국장님 일정 ${hm(av.block.raw ? av.block.raw.s : av.block.s)}~${hm(av.block.raw ? av.block.raw.e : av.block.e)}`;
@@ -491,7 +484,7 @@ export function cleanSettings(input) {
     o.places = items.join(', ').slice(0, 3000);
   }
   num('prepMin', 0, 120);
-  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords', 'allDayOffKeywords']) if (input[k] != null) o[k] = String(input[k]).split(/[,\n]/).map(x => x.trim()).filter(Boolean).join(',').slice(0, 1000); num('defaultMin', 3, 60);
+  for (const k of ['extKeywords', 'localKeywords', 'prepKeywords']) if (input[k] != null) o[k] = String(input[k]).split(/[,\n]/).map(x => x.trim()).filter(Boolean).join(',').slice(0, 1000); num('defaultMin', 3, 60);
   if (o.remindEveryMin != null && o.callLimitMin != null && o.remindEveryMin > o.callLimitMin) fail('invalid-argument', '재알림 간격은 자동 취소 시간보다 길 수 없습니다.');
   return o;
 }
@@ -538,18 +531,6 @@ export function extInfo(ev, sIn) {
   return { ext: false };
 }
 export const isExternal = (ev, s) => extInfo(ev, s).ext;
-// 종일 일정 판단: 대외 일정(출장 등)이거나 휴가 등 낱말이 있으면 그날 호출을 막음(block)
-export function allDayInfo(ev, sIn) {
-  const s = withDefaults(sIn);
-  const x = extInfo(ev, s);
-  if (x.ext) return { block: true, why: x.place ? `대외 · ${x.place}` : '대외 일정' };
-  const t = `${ev.title || ''} ${ev.loc || ''}`.toLowerCase();
-  const k = kw(s.allDayOffKeywords).find(w => t.includes(w));
-  return k ? { block: true, why: k } : { block: false, why: '' };
-}
-export function publicAllDay(list, withTitle = false) {
-  return (list || []).map(a => (typeof a === 'string' ? { block: false, ...(withTitle ? { title: a } : {}) } : { block: !!a.block, ...(withTitle && a.title ? { title: String(a.title).slice(0, 80) } : {}) }));
-}
 // 회의 준비가 필요한 일정인지: 제목·장소·설명 어디든 낱말이 있으면 true (띄어쓰기 무시, '12회의실'은 '2회의실'로 보지 않음)
 export function needsPrep(ev, sIn) {
   const s = withDefaults(sIn);

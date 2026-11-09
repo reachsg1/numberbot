@@ -18,11 +18,11 @@ function seedDay(st, now) {
   if (st.day === day) return;
   const T = h => L.at(day, h);
   st.day = day;
-  st.dayPrivate = { syncedAt: now, allDay: [{ title: '(예시) 국정감사 대응 기간', block: false }], busy: [
+  st.dayPrivate = { syncedAt: now, allDay: ['(예시) 실국장 만찬'], busy: [
     { s: T('10:30'), e: T('11:30'), title: '(예시) 국정감사 대비 간부회의', loc: '본청 5층' },
     { s: T('14:00'), e: T('15:00'), title: '(예시) 농식품부 업무협의', loc: '정부세종청사' },
     { s: T('16:30'), e: T('17:00'), title: '(예시) 기관장 보고', loc: '2회의실' }].map(b => { const x = L.extInfo(b, st.settings); return { ...b, key: 'demo@' + b.s, auto: x.ext, autoRet: x.ret ?? null, place: x.place || '', km: x.km || null, ext: x.ext, ret: x.ext ? x.ret : null, pre: L.needsPrep(b, st.settings) }; }) };
-  st.dayDoc = { nextNo: 1, syncedAt: now, allDayCount: 1, allDay: L.publicAllDay(st.dayPrivate.allDay, true), busy: L.publicBusy(st.dayPrivate.busy, true) };
+  st.dayDoc = { nextNo: 1, syncedAt: now, allDayCount: 1, busy: L.publicBusy(st.dayPrivate.busy, true) };
   st.tickets = []; st.priv = {}; st.logs = []; st.inbox = [];
   // 예시 대기자 두 명
   const mk = (uid, name, dept, topic, refMin, ago) => {
