@@ -39,6 +39,7 @@
 2. **Create Database** (또는 Marketplace) → **Upstash** → **Upstash for Redis**를 고릅니다.
 3. 요금제는 **Free**, 지역은 **Tokyo(ap-northeast-1)**처럼 가까운 곳을 고른 뒤 만듭니다.
 4. 이 프로젝트에 **Connect**합니다. 환경 변수 `KV_REST_API_URL`과 `KV_REST_API_TOKEN`이 자동으로 들어갑니다.
+   - 무료 Upstash를 이미 다른 프로젝트에서 쓰고 있다면, Storage에서 **Redis**(Redis Cloud, Free 30MB)를 붙여도 됩니다. 이때 들어오는 `REDIS_URL`을 줄안서가 자동으로 알아봅니다.
 
 ## 3. 관리자 비밀번호 정하기 (환경 변수)
 

@@ -16,7 +16,7 @@ export async function loadApi() {
       const j = await r.json().catch(() => null);
       if (j) server = true;
       if (j && j.configured) return (await import('./api-server.js')).create(cfg, j);
-      if (j && j.configured === false) note = '저장소(Upstash Redis) 연결 전이라 이 브라우저에서만 동작'
+      if (j && j.configured === false) note = '저장소(Redis) 연결 전이라 이 브라우저에서만 동작'
         + (j.redisEnvNames ? (j.redisEnvNames.length ? ` (찾은 이름: ${j.redisEnvNames.join(', ')})` : ' (Redis 환경변수가 하나도 없음 → Storage 연결 후 Redeploy)') : '');
       else if (j && j.error) {
         // 서버는 있는데 잠깐 오류: 데모로 빠지지 않고 실제 운영 화면에서 오류를 보여 줍니다.
